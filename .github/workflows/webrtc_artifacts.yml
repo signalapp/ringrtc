@@ -28,6 +28,11 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
+      - name: Setup Git Cookies
+        uses: ./.github/actions/setup-gitcookies
+        with:
+          cookie-content: ${{ secrets.WEBRTC_GIT_COOKIES }}
+
       - run: ./bin/build-webrtc.py --target android --release
 
       - name: Output Artifact Checksum
@@ -61,6 +66,11 @@ jobs:
       # Installs the pkg_resources python module needed to build webrtc on a mac host
       - run: pip install setuptools
 
+      - name: Setup Git Cookies
+        uses: ./.github/actions/setup-gitcookies
+        with:
+          cookie-content: ${{ secrets.WEBRTC_GIT_COOKIES }}
+
       - run: ./bin/build-webrtc.py --target ios --release
 
       - name: Output Artifact Checksum
@@ -91,6 +101,11 @@ jobs:
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64
+
+      - name: Setup Git Cookies
+        uses: ./.github/actions/setup-gitcookies
+        with:
+          cookie-content: ${{ secrets.WEBRTC_GIT_COOKIES }}
 
       - run: ./bin/build-webrtc.py --target linux --release
 
@@ -134,6 +149,11 @@ jobs:
 
       # Installs the pkg_resources python module needed to build webrtc on a mac host
       - run: pip install setuptools
+
+      - name: Setup Git Cookies
+        uses: ./.github/actions/setup-gitcookies
+        with:
+          cookie-content: ${{ secrets.WEBRTC_GIT_COOKIES }}
 
       - run: ./bin/build-webrtc.py --target mac --release
 
@@ -184,6 +204,11 @@ jobs:
       with:
         version-sdk: 26100
         features: 'OptionId.WindowsDesktopDebuggers'
+
+    - name: Setup Git Cookies
+      uses: ./.github/actions/setup-gitcookies
+      with:
+        cookie-content: ${{ secrets.WEBRTC_GIT_COOKIES }}
 
     - run: python bin/build-webrtc.py --target windows --release
       shell: bash

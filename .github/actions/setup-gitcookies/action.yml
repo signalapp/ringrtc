@@ -1,0 +1,24 @@
+name: "Setup Git Cookies"
+description: "Configures a .gitcookies file"
+inputs:
+  cookie-content:
+    description: "The raw content of the gitcookie"
+    required: true
+  cookie-path:
+    description: "Where to store the cookie file"
+    default: ".gitcookies"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Write and Configure Cookies
+      uses: gacts/run-and-post-run@v1
+      with:
+        shell: bash
+        run: |
+          echo "${{ inputs.cookie-content }}" > "${{ inputs.cookie-path }}"
+          chmod 600 "${{ inputs.cookie-path }}"
+          git config --global http.cookiefile "$(pwd)/${{ inputs.cookie-path }}"
+
+        post: rm -f "${{ inputs.cookie-path }}"

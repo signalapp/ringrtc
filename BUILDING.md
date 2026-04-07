@@ -14,6 +14,10 @@ The following is derived from the depot_tools tutorial: https://commondatastorag
     git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
     export PATH=<somewhere>/depot_tools:"$PATH"
 
+### Chromium Gitcookies
+
+To sync WebRTC build tools from chromium.googlesource.com, you need to setup a .gitcookies that will authenticate to chromium.googlesource.com. Go to [chromium.googlesource.com](https://chromium.googlesource.com/) and sign in with your Google Account. Accept the terms and click [generate a password](https://www.googlesource.com/new-password), then click "Authenticate for all of googlesource.com". Follow the instructions onscreen to setup .gitcookies.
+
 ### Protobuf
 
 The protobuf compiler, protoc, is needed to build RingRTC. Installation is platform specific and can be found [here](https://protobuf.dev/installation/).
