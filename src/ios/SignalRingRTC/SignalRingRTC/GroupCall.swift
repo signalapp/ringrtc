@@ -665,14 +665,13 @@ public class GroupCall {
             return AppVideoRequest(demux_id: resolution.demuxId, width: resolution.width, height: resolution.height, framerate: appFramerate)
         }
 
-        var appResolutionArray = appResolutions.withUnsafeBufferPointer { appResolutionBytes in
-            return AppVideoRequestArray(
+        appResolutions.withUnsafeBufferPointer { appResolutionBytes in
+            var appResolutionArray = AppVideoRequestArray(
                 resolutions: appResolutionBytes.baseAddress,
                 count: resolutions.count
             )
+            ringrtcRequestVideo(self.ringRtcCallManager, clientId, &appResolutionArray, activeSpeakerHeight)
         }
-
-        ringrtcRequestVideo(self.ringRtcCallManager, clientId, &appResolutionArray, activeSpeakerHeight)
     }
 
     @MainActor
@@ -759,14 +758,13 @@ public class GroupCall {
             }
         }
 
-        var appGroupMemberInfoArray = appMembers.withUnsafeBufferPointer { appMembersBytes in
-            return AppGroupMemberInfoArray(
+        appMembers.withUnsafeBufferPointer { appMembersBytes in
+            var appGroupMemberInfoArray = AppGroupMemberInfoArray(
                 members: appMembersBytes.baseAddress,
                 count: members.count
             )
+            ringrtcSetGroupMembers(self.ringRtcCallManager, clientId, &appGroupMemberInfoArray)
         }
-
-        ringrtcSetGroupMembers(self.ringRtcCallManager, clientId, &appGroupMemberInfoArray)
     }
 
     @MainActor

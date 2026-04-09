@@ -792,16 +792,15 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             }
         }
 
-        var appIceCandidateArray = appIceCandidates.withUnsafeBufferPointer { appIceCandidatesBytes in
-            return AppIceCandidateArray(
+        try appIceCandidates.withUnsafeBufferPointer { appIceCandidatesBytes in
+            var appIceCandidateArray = AppIceCandidateArray(
                 candidates: appIceCandidatesBytes.baseAddress,
                 count: candidates.count
             )
-        }
-
-        let retPtr = ringrtcReceivedIceCandidates(ringRtcCallManager, callId, remoteUuidSlice, sourceDevice, &appIceCandidateArray)
-        if retPtr == nil {
-            throw CallManagerError.apiFailed(description: "ringrtcReceivedIceCandidates() function failure")
+            let retPtr = ringrtcReceivedIceCandidates(ringRtcCallManager, callId, remoteUuidSlice, sourceDevice, &appIceCandidateArray)
+            if retPtr == nil {
+                throw CallManagerError.apiFailed(description: "ringrtcReceivedIceCandidates() function failure")
+            }
         }
     }
 
