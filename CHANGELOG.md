@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.67.3
+
+- iOS: Move method calls inside buffer accesses
+
 ## v2.67.2
 
 - Update to webrtc 7680b
