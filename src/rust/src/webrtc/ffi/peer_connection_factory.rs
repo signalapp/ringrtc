@@ -72,36 +72,4 @@ unsafe extern "C" {
         factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
         source: webrtc::ptr::BorrowedRc<RffiVideoSource>,
     ) -> webrtc::ptr::OwnedRc<RffiVideoTrack>;
-    #[cfg(feature = "native")]
-    pub fn Rust_getAudioPlayoutDevices(
-        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
-    ) -> i16;
-    #[cfg(feature = "native")]
-    pub fn Rust_getAudioPlayoutDeviceName(
-        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
-        index: u16,
-        name_out: *mut c_char,
-        uuid_out: *mut c_char,
-    ) -> i32;
-    #[cfg(feature = "native")]
-    pub fn Rust_setAudioPlayoutDevice(
-        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
-        index: u16,
-    ) -> bool;
-    #[cfg(feature = "native")]
-    pub fn Rust_getAudioRecordingDevices(
-        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
-    ) -> i16;
-    #[cfg(feature = "native")]
-    pub fn Rust_getAudioRecordingDeviceName(
-        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
-        index: u16,
-        name_out: *mut c_char,
-        uuid_out: *mut c_char,
-    ) -> i32;
-    #[cfg(feature = "native")]
-    pub fn Rust_setAudioRecordingDevice(
-        factory: webrtc::ptr::BorrowedRc<RffiPeerConnectionFactoryOwner>,
-        index: u16,
-    ) -> bool;
 }

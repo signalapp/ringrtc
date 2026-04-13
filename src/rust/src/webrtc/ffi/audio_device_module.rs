@@ -14,17 +14,8 @@ use libc::size_t;
 
 use crate::{
     webrtc,
-    webrtc::audio_device_module::{AudioDeviceModule, AudioLayer, WindowsDeviceType},
+    webrtc::audio_device_module::{AudioDeviceModule, AudioLayer},
 };
-
-/// Wrapper type for C++ AudioTransport.
-#[derive(Debug, Copy, Clone)]
-pub struct RffiAudioTransport {
-    pub callback: *const c_void,
-}
-
-// Safety: managed by not allowing changes to the transport while playout or recording are in progress.
-unsafe impl Send for RffiAudioTransport {}
 
 /// all_adm_functions is a higher-level macro that enables "tt muncher" macros
 /// The list of functions MUST be kept in sync with AudioDeviceCallbacks in webrtc C++, and
@@ -33,8 +24,6 @@ macro_rules! all_adm_functions {
     ($macro:ident) => {
         $macro!(
             active_audio_layer(audio_layer: webrtc::ptr::Borrowed<AudioLayer>) -> i32;
-
-            register_audio_callback(audio_callback: *const c_void) -> i32;
 
             // Main initialization and termination
             init() -> i32;
@@ -46,13 +35,6 @@ macro_rules! all_adm_functions {
             recording_devices() -> i16;
             playout_device_name(index: u16, name: webrtc::ptr::Borrowed<c_uchar>, guid: webrtc::ptr::Borrowed<c_uchar>) -> i32;
             recording_device_name(index: u16, name: webrtc::ptr::Borrowed<c_uchar>, guid: webrtc::ptr::Borrowed<c_uchar>) -> i32;
-
-            // Device selection
-            set_playout_device(index: u16) -> i32;
-            set_playout_device_win(device: WindowsDeviceType) -> i32;
-
-            set_recording_device(index: u16) -> i32;
-            set_recording_device_win(device: WindowsDeviceType) -> i32;
 
             // Audio transport initialization
             playout_is_available(available: webrtc::ptr::Borrowed<bool>) -> i32;
@@ -243,7 +225,6 @@ pub unsafe extern "C" fn decrement_adm_ref_count(adm_borrowed: webrtc::ptr::Borr
 
 unsafe extern "C" {
     pub fn Rust_recordedDataIsAvailable(
-        audio_transport: *const c_void,
         audio_samples: *const c_void,
         n_samples: size_t,
         n_bytes_per_sample: size_t,
@@ -258,7 +239,6 @@ unsafe extern "C" {
     ) -> i32;
 
     pub fn Rust_needMorePlayData(
-        audio_transport: *const c_void,
         n_samples: size_t,
         n_bytes_per_sample: size_t,
         n_channels: size_t,

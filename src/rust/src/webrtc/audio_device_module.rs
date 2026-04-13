@@ -31,7 +31,6 @@ use crate::{
         audio_device_module_utils::{
             DeviceCollectionWrapper, copy_and_truncate_string, redact_by_regex, redact_for_logging,
         },
-        ffi::audio_device_module::RffiAudioTransport,
         peer_connection_factory::{AudioDevice, AudioDeviceObserver},
     },
 };
@@ -82,7 +81,6 @@ type OutFrame = StereoFrame<i16>;
 #[derive(Debug)]
 enum Event {
     RefreshCache(DeviceType),
-    SetCallback(Arc<Mutex<RffiAudioTransport>>),
     SetPlayoutDevice(u16),
     SetPlayoutDeviceById(String),
     SetRecordingDevice(u16),
@@ -123,7 +121,6 @@ struct Worker {
     // These may outlive the ctx
     input_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
     output_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
-    audio_transport: Arc<Mutex<RffiAudioTransport>>,
     audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
     send_to_webrtc: Arc<AtomicBool>,
 }
@@ -279,7 +276,6 @@ impl Worker {
             .prefs(StreamPrefs::VOICE)
             .take();
         let mut builder = cubeb::StreamBuilder::<OutFrame>::new();
-        let transport = Arc::clone(&self.audio_transport);
         let min_latency = self.ctx.min_latency(&params).unwrap_or_else(|e| {
             warn!(
                 "Could not get min latency for playout; using default: {:?}",
@@ -321,12 +317,8 @@ impl Worker {
 
                 // Then, request more data from WebRTC.
                 while written < output.len() {
-                    let play_data = Worker::need_more_play_data(
-                        Arc::clone(&transport),
-                        WEBRTC_WINDOW,
-                        NUM_CHANNELS,
-                        SAMPLE_FREQUENCY,
-                    );
+                    let play_data =
+                        Worker::need_more_play_data(WEBRTC_WINDOW, NUM_CHANNELS, SAMPLE_FREQUENCY);
                     if play_data.success < 0 {
                         // C function failed; propagate error and don't continue.
                         return play_data.success as isize;
@@ -420,7 +412,6 @@ impl Worker {
         }
         .take();
         let mut builder = cubeb::StreamBuilder::<Frame>::new();
-        let transport = Arc::clone(&self.audio_transport);
         let min_latency = self.ctx.min_latency(&params).unwrap_or_else(|e| {
             warn!(
                 "Could not get min latency for recording; using default: {:?}",
@@ -463,7 +454,6 @@ impl Worker {
                         break;
                     }
                     let (ret, _new_mic_level) = Worker::recorded_data_is_available(
-                        Arc::clone(&transport),
                         chunk.to_vec(),
                         NUM_CHANNELS,
                         SAMPLE_FREQUENCY,
@@ -551,10 +541,6 @@ impl Worker {
         for received in receiver {
             if let Err(e) = match received {
                 Event::RefreshCache(d) => self.refresh_device_cache(d),
-                Event::SetCallback(ref transport) => {
-                    self.audio_transport = transport.clone();
-                    Ok(())
-                }
                 Event::SetPlayoutDevice(index) => {
                     if let Some(d) = self.output_device_cache.get(index.into()) {
                         self.playout_device = Some(d.devid);
@@ -646,7 +632,6 @@ impl Worker {
 
     #[allow(clippy::too_many_arguments)]
     fn recorded_data_is_available(
-        rffi_audio_transport: Arc<Mutex<RffiAudioTransport>>,
         samples: Vec<i16>,
         channels: u32,
         samples_per_sec: u32,
@@ -659,23 +644,13 @@ impl Worker {
         let mut new_mic_level = 0u32;
         let estimated_capture_time_ns = estimated_capture_time.map_or(-1, |d| d.as_nanos() as i64);
 
-        let guard = match rffi_audio_transport.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                error!("Failed to get mutex: {:?}", e);
-                return (-1, 0);
-            }
-        };
         // Safety:
-        // * self.audio_transport is within self, and will remain valid while this function is running
-        //   because we enforce that the callback cannot change while playing or recording.
         // * The vector has sizeof(i16) * samples bytes allocated, and we pass both of these
         //   to the C layer, which should not read beyond that bound.
         // * The local new_mic_level pointer is valid and this function is synchronous, so it'll
         //   remain valid while it runs.
         let ret = unsafe {
             crate::webrtc::ffi::audio_device_module::Rust_recordedDataIsAvailable(
-                guard.callback,
                 samples.as_ptr() as *const c_void,
                 samples.len(),
                 std::mem::size_of::<i16>(),
@@ -692,39 +667,19 @@ impl Worker {
         (ret, new_mic_level)
     }
 
-    fn need_more_play_data(
-        rffi_audio_transport: Arc<Mutex<RffiAudioTransport>>,
-        samples: usize,
-        channels: u32,
-        samples_per_sec: u32,
-    ) -> PlayData {
+    fn need_more_play_data(samples: usize, channels: u32, samples_per_sec: u32) -> PlayData {
         let mut data = vec![0i16; samples];
         let mut samples_out = 0usize;
         let mut elapsed_time_ms = 0i64;
         let mut ntp_time_ms = 0i64;
 
-        let guard = match rffi_audio_transport.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                error!("Failed to get mutex: {:?}", e);
-                return PlayData {
-                    success: -1,
-                    data: Vec::new(),
-                    elapsed_time: None,
-                    ntp_time: None,
-                };
-            }
-        };
         // Safety:
-        // * rffi_audio_transport will remain valid while this function is running
-        //   because we enforce that the callback cannot change while playing or recording.
         // * The vector has sizeof(i16) * samples bytes allocated, and we pass both of these
         //   to the C layer, which should not write beyond that bound.
         // * The local variable pointers are all valid and this function is synchronous, so they'll
         //   remain valid while it runs.
         let ret = unsafe {
             crate::webrtc::ffi::audio_device_module::Rust_needMorePlayData(
-                guard.callback,
                 samples,
                 std::mem::size_of::<i16>(),
                 channels.try_into().unwrap(), // constant, so unwrap is safe
@@ -811,9 +766,6 @@ impl Worker {
                 output_device_cache: Default::default(),
                 input_device_names,
                 output_device_names,
-                audio_transport: Arc::new(Mutex::new(RffiAudioTransport {
-                    callback: std::ptr::null(),
-                })),
                 audio_device_observer: None,
                 send_to_webrtc: Arc::new(AtomicBool::new(true)),
             };
@@ -1073,27 +1025,6 @@ impl AudioDeviceModule {
 
     pub fn active_audio_layer(&self, _audio_layer: webrtc::ptr::Borrowed<AudioLayer>) -> i32 {
         -1
-    }
-
-    pub fn register_audio_callback(&mut self, audio_transport: *const c_void) -> i32 {
-        // It is unsafe to change this callback while playing or recording, as
-        // the change might then race with invocations of the callback, which
-        // need not be serialized.
-        if self.playing() || self.recording() {
-            return -1;
-        }
-        if let Err(e) = self
-            .mpsc_sender
-            .send(Event::SetCallback(std::sync::Arc::new(Mutex::new(
-                RffiAudioTransport {
-                    callback: audio_transport,
-                },
-            ))))
-        {
-            error!("Failed to request SetCallback: {}", e);
-            return -1;
-        }
-        0
     }
 
     // Main initialization and termination
@@ -1465,14 +1396,6 @@ impl AudioDeviceModule {
         0
     }
 
-    // Not a chromium interface function
-    pub fn warmup_recording(&mut self) -> anyhow::Result<()> {
-        if let Err(e) = self.mpsc_sender.send(Event::WarmupRecording) {
-            return Err(anyhow!("Failed to request WarmupRecording: {}", e));
-        }
-        Ok(())
-    }
-
     pub fn stop_recording(&mut self) -> i32 {
         self.attempted_recording_init = false;
         self.attempted_recording_start = false;
@@ -1664,6 +1587,8 @@ impl AudioDeviceModule {
         }
     }
 
+    // The below are inaccessible to C++, so they can use more complex rust types
+
     // Register a new callback to be notified of audio device changes, **replacing any existing one**
     pub fn register_audio_device_callback(
         &mut self,
@@ -1674,6 +1599,21 @@ impl AudioDeviceModule {
             .send(Event::RegisterAudioObserver(audio_device_observer))
         {
             bail!("Failed to send RegisterAudioObserver request: {}", e);
+        }
+        Ok(())
+    }
+
+    pub fn get_audio_playout_devices(&mut self) -> anyhow::Result<Vec<Option<AudioDevice>>> {
+        self.enumerate_devices(DeviceType::OUTPUT)
+    }
+
+    pub fn get_audio_recording_devices(&mut self) -> anyhow::Result<Vec<Option<AudioDevice>>> {
+        self.enumerate_devices(DeviceType::INPUT)
+    }
+
+    pub fn warmup_recording(&mut self) -> anyhow::Result<()> {
+        if let Err(e) = self.mpsc_sender.send(Event::WarmupRecording) {
+            return Err(anyhow!("Failed to request WarmupRecording: {}", e));
         }
         Ok(())
     }
