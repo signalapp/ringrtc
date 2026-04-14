@@ -1117,7 +1117,7 @@ You should also get your employer (if you work as a programmer) or school, if an
 
 ```
 
-## sketches-ddsketch 0.3.0
+## sketches-ddsketch 0.3.1
 
 ```
                                  Apache License
@@ -1900,7 +1900,7 @@ SOFTWARE.
 
 ```
 
-## cc 1.2.54, cfg-if 1.0.4, cmake 0.1.57, find-msvc-tools 0.1.8, pkg-config 0.3.32
+## cc 1.2.59, cfg-if 1.0.4, cmake 0.1.58, find-msvc-tools 0.1.9, pkg-config 0.3.32
 
 ```
 Copyright (c) 2014 Alex Crichton
@@ -1994,7 +1994,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## bitflags 1.3.2, bitflags 2.10.0, log 0.4.29, regex-automata 0.4.13, regex-syntax 0.8.8, regex 1.12.2
+## bitflags 1.3.2, bitflags 2.11.0, log 0.4.29, regex-automata 0.4.14, regex-syntax 0.8.10, regex 1.12.3
 
 ```
 Copyright (c) 2014 The Rust Project Developers
@@ -2025,42 +2025,11 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## uuid 1.20.0
+## uuid 1.23.0
 
 ```
 Copyright (c) 2014 The Rust Project Developers
 Copyright (c) 2018 Ashley Mannix, Christopher Armstrong, Dylan DPC, Hunar Roop Kahlon
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-
-```
-
-## libc 0.2.180
-
-```
-Copyright (c) 2014-2020 The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -2114,7 +2083,7 @@ THE SOFTWARE.
 
 ```
 
-## either 1.15.0, itertools 0.14.0, petgraph 0.8.3, serde_with 3.16.1, serde_with_macros 3.16.1
+## either 1.15.0, itertools 0.14.0, petgraph 0.8.3, serde_with 3.18.0, serde_with_macros 3.18.0
 
 ```
 Copyright (c) 2015
@@ -2170,7 +2139,7 @@ THE SOFTWARE.
 
 ```
 
-## tempfile 3.24.0
+## tempfile 3.27.0
 
 ```
 Copyright (c) 2015 Steven Allen
@@ -2232,7 +2201,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## jni-sys 0.3.0
+## jni-sys 0.3.1, jni-sys 0.4.1
 
 ```
 Copyright (c) 2015 The rust-jni-sys Developers
@@ -2402,7 +2371,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## hashbrown 0.15.5, hashbrown 0.16.1
+## hashbrown 0.15.5, hashbrown 0.17.0
 
 ```
 Copyright (c) 2016 Amanieu d'Antras
@@ -2495,7 +2464,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## indexmap 2.13.0
+## indexmap 2.14.0
 
 ```
 Copyright (c) 2016--2017
@@ -2592,37 +2561,6 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 Copyright (c) 2017 Artyom Pavlov
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-
-```
-
-## fnv 1.0.7
-
-```
-Copyright (c) 2017 Contributors
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -2905,6 +2843,38 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 Copyright (c) 2018-2025 The rust-random Project Developers
+Copyright (c) 2014 The Rust Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+```
+
+## getrandom 0.4.2
+
+```
+Copyright (c) 2018-2026 The rust-random Project Developers
 Copyright (c) 2014 The Rust Project Developers
 
 Permission is hereby granted, free of charge, to any
@@ -3301,7 +3271,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## tonic-build 0.14.2
+## tonic-build 0.14.5
 
 ```
 Copyright (c) 2025 Lucio Franco
@@ -3326,7 +3296,7 @@ THE SOFTWARE.
 
 ```
 
-## toml_datetime 0.7.5+spec-1.1.0, toml_edit 0.23.10+spec-1.0.0, toml_parser 1.0.6+spec-1.1.0
+## toml_datetime 1.1.1+spec-1.1.0, toml_edit 0.25.11+spec-1.1.0, toml_parser 1.1.2+spec-1.1.0
 
 ```
 Copyright (c) Individual contributors
@@ -3348,6 +3318,37 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+```
+
+## libc 0.2.184
+
+```
+Copyright (c) The Rust Project Developers
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
 
 ```
 
@@ -3383,7 +3384,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## zerocopy-derive 0.8.34, zerocopy 0.8.34
+## zerocopy-derive 0.8.48, zerocopy 0.8.48
 
 ```
 Copyright 2023 The Fuchsia Authors
@@ -3442,7 +3443,7 @@ SOFTWARE.
 
 ```
 
-## darling 0.21.3, darling_core 0.21.3, darling_macro 0.21.3
+## darling 0.23.0, darling_core 0.23.0, darling_macro 0.23.0
 
 ```
 MIT License
@@ -3550,12 +3551,12 @@ SOFTWARE.
 
 ```
 
-## const-str 1.0.0
+## const-str 1.1.0
 
 ```
 MIT License
 
-Copyright (c) 2020-2025 Nugine
+Copyright (c) 2020-2026 Nugine
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -3577,7 +3578,7 @@ SOFTWARE.
 
 ```
 
-## derive-where 1.6.0
+## derive-where 1.6.1
 
 ```
 MIT License
@@ -3604,7 +3605,7 @@ SOFTWARE.
 
 ```
 
-## cesu8 1.1.0, neon 1.1.1, objc2-core-foundation 0.3.2, objc2-io-kit 0.3.2, protobuf-parse 3.7.2, tonic-prost-build 0.14.2, windows-collections 0.2.0, windows-collections 0.3.2, windows-core 0.61.2, windows-core 0.62.2, windows-future 0.2.1, windows-future 0.3.2, windows-implement 0.60.2, windows-interface 0.59.3, windows-link 0.1.3, windows-link 0.2.1, windows-numerics 0.2.0, windows-numerics 0.3.1, windows-result 0.3.4, windows-result 0.4.1, windows-strings 0.4.2, windows-strings 0.5.1, windows-threading 0.1.0, windows-threading 0.2.1, windows 0.61.3, windows 0.62.2
+## cesu8 1.1.0, jni-sys-macros 0.4.1, neon 1.1.1, objc2-core-foundation 0.3.2, objc2-io-kit 0.3.2, protobuf-parse 3.7.2, tonic-prost-build 0.14.5, windows-collections 0.2.0, windows-collections 0.3.2, windows-core 0.61.2, windows-core 0.62.2, windows-future 0.2.1, windows-future 0.3.2, windows-implement 0.60.2, windows-interface 0.59.3, windows-link 0.1.3, windows-link 0.2.1, windows-numerics 0.2.0, windows-numerics 0.3.1, windows-result 0.3.4, windows-result 0.4.1, windows-strings 0.4.2, windows-strings 0.5.1, windows-threading 0.1.0, windows-threading 0.2.1, windows 0.61.3, windows 0.62.2
 
 ```
 MIT License
@@ -3653,7 +3654,7 @@ SOFTWARE.
 
 ```
 
-## curve25519-dalek-derive 0.1.1, anyhow 1.0.100, displaydoc 0.2.5, fastrand 2.3.0, home 0.5.12, itoa 1.0.17, linkme-impl 0.3.35, linkme 0.3.35, linux-raw-sys 0.11.0, linux-raw-sys 0.4.15, num_enum 0.7.5, num_enum_derive 0.7.5, once_cell 1.21.3, prettyplease 0.2.37, proc-macro-crate 3.4.0, proc-macro2 1.0.106, quote 1.0.44, rustix 0.38.44, rustix 1.1.3, rustversion 1.0.22, semver 1.0.27, send_wrapper 0.6.0, serde 1.0.228, serde_core 1.0.228, serde_derive 1.0.228, serde_json 1.0.149, syn 2.0.114, thiserror-impl 1.0.69, thiserror-impl 2.0.18, thiserror 1.0.69, thiserror 2.0.18, unicode-ident 1.0.22, zmij 1.0.17
+## curve25519-dalek-derive 0.1.1, anyhow 1.0.102, displaydoc 0.2.5, fastrand 2.4.1, home 0.5.12, itoa 1.0.18, linkme-impl 0.3.35, linkme 0.3.35, linux-raw-sys 0.12.1, linux-raw-sys 0.4.15, num_enum 0.7.6, num_enum_derive 0.7.6, once_cell 1.21.4, prettyplease 0.2.37, proc-macro-crate 3.5.0, proc-macro2 1.0.106, quote 1.0.45, rustix 0.38.44, rustix 1.1.4, rustversion 1.0.22, semver 1.0.28, send_wrapper 0.6.0, serde 1.0.228, serde_core 1.0.228, serde_derive 1.0.228, serde_json 1.0.149, syn 2.0.117, thiserror-impl 1.0.69, thiserror-impl 2.0.18, thiserror 1.0.69, thiserror 2.0.18, unicode-ident 1.0.24, zmij 1.0.21
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -3682,7 +3683,7 @@ DEALINGS IN THE SOFTWARE.
 
 ```
 
-## winnow 0.7.14
+## winnow 1.0.1
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining
@@ -3706,7 +3707,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ```
 
-## ntapi 0.4.2
+## ntapi 0.4.3
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -3729,7 +3730,7 @@ SOFTWARE.
 
 ```
 
-## pulldown-cmark 0.13.0
+## pulldown-cmark 0.13.3
 
 ```
 The MIT License
@@ -3810,7 +3811,7 @@ THE SOFTWARE.
 
 ```
 
-## aho-corasick 1.1.4, memchr 2.7.6, walkdir 2.5.0
+## aho-corasick 1.1.4, memchr 2.8.0, walkdir 2.5.0
 
 ```
 The MIT License (MIT)
@@ -4520,7 +4521,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 ```
 
-## unicode-ident 1.0.22
+## unicode-ident 1.0.24
 
 ```
 UNICODE LICENSE V3
