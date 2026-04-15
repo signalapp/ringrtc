@@ -114,6 +114,8 @@ pub enum MrpReceiveError {
     ReceiveWindowFull(u64),
     #[error("Received unexpected num packets while merge already in progress")]
     PacketMergeConflict,
+    #[error("Specified num_packets is too large for buffer: {0}")]
+    InvalidNumPackets(u32),
     #[error("Unexpected error in merge")]
     InvalidMergeState,
 }
@@ -209,6 +211,10 @@ where
                 if num_packets <= 1 {
                     // treat num_packets == 0 case the same as no num_packets
                     result.push(data);
+                } else if usize::try_from(num_packets).map_or(true, |num_packets| {
+                    num_packets > self.receive_buffer.capacity_limit()
+                }) {
+                    return Err(MrpReceiveError::InvalidNumPackets(num_packets));
                 } else {
                     let mut buffer = MergeBuffer::new(num_packets).unwrap();
                     let _ = buffer.push(data);
@@ -1029,6 +1035,19 @@ mod tests {
             "Should have finished dropping failed packets"
         );
 
+        let should_be_error = alice.receive_and_merge(
+            &MrpHeader {
+                seqnum: Some(alice.ack_seqnum()),
+                num_packets: Some(10_000),
+                ..Default::default()
+            },
+            extendable_packet(None, vec![1]),
+        );
+        assert_eq!(
+            should_be_error,
+            Err(MrpReceiveError::InvalidNumPackets(10_000))
+        );
+
         let mut returned = None;
         let mut bob: MrpStream<ExtendablePacket, ExtendablePacket> =
             MrpStream::with_capacity_limit(16);
@@ -1375,12 +1394,13 @@ mod tests {
             results
         }
 
-        let alice_merge_intervals = generate_random_intervals(1, num_packets as u32);
-        let bob_merge_intervals = generate_random_intervals(1, num_packets as u32);
+        let buffer_size = 64;
+        let alice_merge_intervals = generate_random_intervals(1, num_packets as u32, buffer_size);
+        let bob_merge_intervals = generate_random_intervals(1, num_packets as u32, buffer_size);
         let bob_expected_results = expected_results(num_packets, &alice_merge_intervals);
         let alice_expected_results = expected_results(num_packets, &bob_merge_intervals);
-        let alice = MrpStream::with_capacity_limit(64);
-        let bob = MrpStream::with_capacity_limit(64);
+        let alice = MrpStream::with_capacity_limit(buffer_size);
+        let bob = MrpStream::with_capacity_limit(buffer_size);
         let (to_alice, alice_inbox) = mpsc::channel();
         let (to_bob, bob_inbox) = mpsc::channel();
         let alice_receiver = DelayReceiver::new(
@@ -1545,11 +1565,16 @@ mod tests {
         })
     }
 
-    fn generate_random_intervals(min_seqnum: u32, max_seqnum: u32) -> Vec<(u32, u32)> {
+    fn generate_random_intervals(
+        min_seqnum: u32,
+        max_seqnum: u32,
+        max_merge_size: usize,
+    ) -> Vec<(u32, u32)> {
         if min_seqnum >= max_seqnum {
             return vec![];
         }
 
+        let max_merge_offset = max_merge_size as u32 - 1;
         let mut rng = rng();
         let mut highest = min_seqnum;
         let mut intervals = Vec::new();
@@ -1560,7 +1585,10 @@ mod tests {
                     break v;
                 }
             };
-            let end = rng.random_range((start + 1)..=max_seqnum);
+            let end = std::cmp::min(
+                start + max_merge_offset,
+                rng.random_range((start + 1)..=max_seqnum),
+            );
             intervals.push((start, end));
             highest = end + 1;
         }

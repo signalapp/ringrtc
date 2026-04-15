@@ -89,4 +89,4 @@ impl<T: webrtc::RefCounted> Drop for Arc<T> {
 }
 
 unsafe impl<T: webrtc::RefCounted + Send + Sync> Send for Arc<T> {}
-unsafe impl<T: webrtc::RefCounted + Sync> Sync for Arc<T> {}
+unsafe impl<T: webrtc::RefCounted + Send + Sync> Sync for Arc<T> {}

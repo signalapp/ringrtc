@@ -3519,6 +3519,91 @@ fn group_call_ring_cancelled_by_ringer_before_join() {
 }
 
 #[test]
+fn group_call_ring_not_cancelled_by_different_sender() {
+    test_init();
+
+    let context = TestContext::new();
+    let mut cm = context.cm();
+
+    let self_uuid = vec![1, 0, 1];
+    cm.set_self_uuid(self_uuid.clone()).expect(error_line!());
+
+    let group_id = vec![1, 1, 1];
+    let original_ringer = vec![1, 2, 3];
+    let different_sender = vec![4, 5, 6];
+    let ring_id = group_call::RingId::from(42);
+
+    let ring_message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Ring.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    ring_message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(original_ringer, 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+
+    // Receive a cancellation from a different sender
+    let cancel_message = protobuf::signaling::CallMessage {
+        ring_intention: Some(protobuf::signaling::call_message::RingIntention {
+            group_id: Some(group_id.clone()),
+            ring_id: Some(ring_id.into()),
+            r#type: Some(protobuf::signaling::call_message::ring_intention::Type::Cancelled.into()),
+        }),
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    cancel_message
+        .encode(&mut buf)
+        .expect("cannot fail encoding to Vec");
+
+    cm.received_call_message(different_sender, 1, 2, buf, Duration::ZERO)
+        .expect(error_line!());
+
+    cm.synchronize().expect(error_line!());
+
+    // Join the group call. Because the cancellation was from a different sender, we
+    // expect the ring is active and an acceptance message will be sent.
+    let group_call_id = context
+        .create_group_call(group_id.clone())
+        .expect(error_line!());
+    cm.join(group_call_id);
+    cm.synchronize().expect(error_line!());
+
+    let messages = cm
+        .platform()
+        .expect(error_line!())
+        .take_outgoing_call_messages();
+    match &messages[..] {
+        [message] => {
+            assert_eq!(&self_uuid[..], &message.recipient_id[..]);
+            let call_message = protobuf::signaling::CallMessage::decode(&message.message[..])
+                .expect(error_line!());
+            assert_eq!(
+                protobuf::signaling::CallMessage {
+                    ring_response: Some(protobuf::signaling::call_message::RingResponse {
+                        group_id: Some(group_id),
+                        ring_id: Some(ring_id.into()),
+                        r#type: Some(
+                            protobuf::signaling::call_message::ring_response::Type::Accepted.into()
+                        ),
+                    }),
+                    ..Default::default()
+                },
+                call_message
+            );
+        }
+        _ => panic!("expected one acceptance message, got: {:?}", messages),
+    }
+}
+
+#[test]
 fn group_call_ring_cancelled_by_another_device_before_join() {
     test_init();
 

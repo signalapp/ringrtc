@@ -2259,6 +2259,10 @@ fn negotiate_srtp_keys(
     .map_err(|_| RingRtcError::InvalidRemoteSrtpKey)?;
 
     let shared_secret = local_secret.diffie_hellman(&remote_public_key);
+    if !shared_secret.was_contributory() {
+        error!("remote secret was non-contributory, rejecting srtp negotiation");
+        return Err(RingRtcError::InvalidRemoteSrtpKey.into());
+    }
 
     let hkdf_salt = vec![0u8; 32];
     let hkdf_info_prefix = "Signal_Calling_20200807_SignallingDH_SRTPKey_KDF";
@@ -2348,5 +2352,21 @@ mod tests {
         assert_eq!(expect(300_000), compute(Low, 1_999_999, true));
         assert_eq!(expect(300_000), compute(Low, 1_000_000, true));
         assert_eq!(expect(300_000), compute(Low, 300_000, true));
+    }
+
+    #[test]
+    fn negotiate_srtp_keys_rejects_low_order_remote_key() {
+        let local_secret = StaticSecret::random_from_rng(OsRng);
+        let low_order_key = [0u8; 32];
+        let result =
+            negotiate_srtp_keys(&local_secret, &low_order_key, b"caller_key", b"callee_key");
+        let err = result
+            .err()
+            .expect("expected an error for a non-contributory remote key");
+        assert!(
+            err.downcast_ref::<RingRtcError>()
+                .is_some_and(|e| matches!(e, RingRtcError::InvalidRemoteSrtpKey)),
+            "expected RingRtcError::InvalidRemoteSrtpKey, got: {err}"
+        );
     }
 }

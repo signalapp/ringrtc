@@ -21,7 +21,7 @@ pub struct CallRwLock<T: ?Sized> {
 }
 
 unsafe impl<T: ?Sized + Send> Send for CallRwLock<T> {}
-unsafe impl<T: ?Sized + Send> Sync for CallRwLock<T> {}
+unsafe impl<T: ?Sized + Send + Sync> Sync for CallRwLock<T> {}
 
 impl<T> CallRwLock<T> {
     /// Creates a new CallRwLock

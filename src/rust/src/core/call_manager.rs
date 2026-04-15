@@ -201,6 +201,7 @@ where
 /// Information about a received group ring that hasn't yet been accepted or cancelled.
 #[derive(Debug)]
 struct OutstandingGroupRing {
+    sender_id: UserId,
     ring_id: group_call::RingId,
     received: Instant,
 }
@@ -646,14 +647,19 @@ where
         handle_active_call_api!(self, CallManager::handle_hangup)
     }
 
+    /// removes outstanding group ring. If expected user ID is specified, verifies the pending
+    /// ring's sender_id matches before removing
     fn remove_outstanding_group_ring(
         &mut self,
         group_id: group_call::GroupIdRef,
+        expected_user_id: Option<&UserId>,
         ring_id: group_call::RingId,
     ) -> Result<()> {
         let mut outstanding_group_rings = self.outstanding_group_rings.lock()?;
         if let Some(ring) = outstanding_group_rings.get(group_id)
             && ring.ring_id == ring_id
+            && expected_user_id
+                .is_none_or(|expected| ring.sender_id.as_slice() == expected.as_slice())
         {
             outstanding_group_rings.remove(group_id);
         }
@@ -669,7 +675,7 @@ where
     ) -> Result<()> {
         info!("cancel_group_ring(): ring_id: {}", ring_id);
 
-        self.remove_outstanding_group_ring(&group_id, ring_id)?;
+        self.remove_outstanding_group_ring(&group_id, None, ring_id)?;
 
         if let Some(reason) = reason {
             let self_uuid = self
@@ -1277,64 +1283,58 @@ where
 
     /// Handle message_send_failure() API from application.
     fn handle_message_send_failure(&mut self, call_id: CallId) -> Result<()> {
-        let mut should_handle = true;
+        let (call, is_active) = self
+            .active_call()
+            .ok()
+            .filter(|call| call.call_id() == call_id)
+            .map(|call| (Some(call), true))
+            .unwrap_or_else(|| {
+                if let Ok(call_map) = self.call_by_call_id.lock() {
+                    (call_map.get(&call_id).cloned(), false)
+                } else {
+                    (None, false)
+                }
+            });
 
-        let active_call = self.active_call().ok().inspect(|active_call| {
-            if active_call.call_id() == call_id
-                && active_call
-                    .state()
-                    .is_ok_and(|state| state.connected_or_reconnecting())
-            {
+        if let Some(call) = call {
+            if is_active {
                 // Get the last sent message type and see if it was for ICE.
                 // Since we are in a connected state, don't handle it if so.
-                if let Ok(message_queue) = self.message_queue.lock()
-                    && message_queue.last_sent_message_type == Some(signaling::MessageType::Ice)
+                if call
+                    .state()
+                    .is_ok_and(|state| state.connected_or_reconnecting())
+                    && self.message_queue.lock().is_ok_and(|queue| {
+                        queue.last_sent_message_type == Some(signaling::MessageType::Ice)
+                    })
                 {
-                    should_handle = false;
+                    warn!(
+                        "handle_message_send_failure(): id: {}, failed to send ICE message but staying in call",
+                        call_id
+                    );
+                } else {
+                    info!(
+                        "handle_message_send_failure(): id: {}, terminating active call",
+                        call_id
+                    );
+                    let _ = self.terminate_active_call(
+                        call.should_send_hangup_on_failure(),
+                        CallEndReason::SignalingFailure,
+                    );
                 }
-            }
-        });
-
-        if should_handle {
-            if let Some(active_call) = active_call {
+            } else {
                 info!(
-                    "handle_message_send_failure(): id: {}, terminating active call",
+                    "handle_message_send_failure(): id: {}, terminating call",
                     call_id
                 );
 
-                let _ = self.terminate_active_call(
-                    active_call.should_send_hangup_on_failure(),
-                    CallEndReason::SignalingFailure,
-                );
-            } else {
-                // See if the associated call is in the call map.
-                let mut call = None;
-                {
-                    if let Ok(call_map) = self.call_by_call_id.lock()
-                        && let Some(v) = call_map.get(&call_id)
-                    {
-                        call = Some(v.clone());
-                    };
-                }
+                let hangup = call
+                    .should_send_hangup_on_failure()
+                    .then_some(signaling::Hangup::Normal);
 
-                match call {
-                    Some(call) => {
-                        info!(
-                            "handle_message_send_failure(): id: {}, terminating call",
-                            call_id
-                        );
-
-                        let hangup = call
-                            .should_send_hangup_on_failure()
-                            .then_some(signaling::Hangup::Normal);
-
-                        self.terminate_call(call, hangup, Some(CallEndReason::SignalingFailure))?;
-                    }
-                    None => {
-                        info!("handle_message_send_failure(): no matching call found");
-                    }
-                }
+                self.terminate_call(call, hangup, Some(CallEndReason::SignalingFailure))?;
             }
+        } else {
+            info!("handle_message_send_failure(): no matching call found");
         }
 
         match self.message_queue.lock() {
@@ -1804,7 +1804,11 @@ where
                                 }
                             }
                             IntentionType::Cancelled => {
-                                self.remove_outstanding_group_ring(group_id, ring_id.into())?;
+                                self.remove_outstanding_group_ring(
+                                    group_id,
+                                    Some(&sender_uuid),
+                                    ring_id.into(),
+                                )?;
                                 group_call::RingUpdate::CancelledByRinger
                             }
                         };
@@ -1863,7 +1867,7 @@ where
                             }
                             ResponseType::Ringing => unreachable!("handled above"),
                         };
-                        self.remove_outstanding_group_ring(group_id, ring_id.into())?;
+                        self.remove_outstanding_group_ring(group_id, None, ring_id.into())?;
                         self.platform.lock()?.group_call_ring_update(
                             std::mem::take(group_id),
                             ring_id.into(),
@@ -1919,6 +1923,7 @@ where
             outstanding_group_rings.insert(
                 group_id.clone(),
                 OutstandingGroupRing {
+                    sender_id: sender_uuid.clone(),
                     ring_id,
                     received: Instant::now(),
                 },
@@ -1942,7 +1947,11 @@ where
         self.worker
             .send_delayed(*INCOMING_GROUP_CALL_RING_TIME, move |_| {
                 let result = try_scoped(|| {
-                    self_for_timeout.remove_outstanding_group_ring(&group_id, ring_id)?;
+                    self_for_timeout.remove_outstanding_group_ring(
+                        &group_id,
+                        Some(&sender_uuid),
+                        ring_id,
+                    )?;
                     self_for_timeout.platform.lock()?.group_call_ring_update(
                         group_id,
                         ring_id,

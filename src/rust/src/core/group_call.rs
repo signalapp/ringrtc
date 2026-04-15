@@ -473,6 +473,9 @@ enum DheState {
     WaitingForServerPublicKey {
         client_secret: EphemeralSecret,
     },
+    FailedToNegotiate {
+        reason: &'static str,
+    },
     Negotiated {
         srtp_keys: SrtpKeys,
     },
@@ -495,21 +498,27 @@ impl DheState {
             }
             DheState::WaitingForServerPublicKey { client_secret } => {
                 let shared_secret = client_secret.diffie_hellman(server_pub_key);
-                let mut master_key_material = [0u8; SrtpKeys::MASTER_KEY_MATERIAL_LEN];
-                Hkdf::<Sha256>::new(Some(&[0u8; 32]), shared_secret.as_bytes())
-                    .expand_multi_info(
-                        &[
-                            b"Signal_Group_Call_20211105_SignallingDH_SRTPKey_KDF",
-                            hkdf_extra_info,
-                        ],
-                        &mut master_key_material,
-                    )
-                    .expect("SRTP master key material expansion");
-                DheState::Negotiated {
-                    srtp_keys: SrtpKeys::from_master_key_material(&master_key_material),
+                if !shared_secret.was_contributory() {
+                    DheState::FailedToNegotiate {
+                        reason: "SFU provided remote secret was non-contributory, rejecting srtp negotiation",
+                    }
+                } else {
+                    let mut master_key_material = [0u8; SrtpKeys::MASTER_KEY_MATERIAL_LEN];
+                    Hkdf::<Sha256>::new(Some(&[0u8; 32]), shared_secret.as_bytes())
+                        .expand_multi_info(
+                            &[
+                                b"Signal_Group_Call_20211105_SignallingDH_SRTPKey_KDF",
+                                hkdf_extra_info,
+                            ],
+                            &mut master_key_material,
+                        )
+                        .expect("SRTP master key material expansion");
+                    DheState::Negotiated {
+                        srtp_keys: SrtpKeys::from_master_key_material(&master_key_material),
+                    }
                 }
             }
-            DheState::Negotiated { .. } => {
+            DheState::Negotiated { .. } | DheState::FailedToNegotiate { .. } => {
                 warn!("Attempting to negotiated SRTP keys a second time.");
                 self
             }
@@ -2756,6 +2765,11 @@ impl Client {
                 );
                 let srtp_keys = match &state.dhe_state {
                     DheState::Negotiated { srtp_keys } => srtp_keys,
+                    DheState::FailedToNegotiate { reason } => {
+                        error!("join() failed: {reason}");
+                        Self::end(state, CallEndReason::FailedToNegotiatedSrtpKeys);
+                        return;
+                    }
                     _ => {
                         Self::end(state, CallEndReason::FailedToNegotiatedSrtpKeys);
                         return;
@@ -2978,7 +2992,7 @@ impl Client {
                     ..
                 } => {
                     if group_id == state.group_id {
-                        Self::handle_leaving_received(state, leaving_demux_id);
+                        Self::handle_leaving_received(state, Some(sender_user_id), leaving_demux_id);
                     }
                 }
                 _ => {
@@ -4320,7 +4334,7 @@ impl Client {
                         }
                         if let Some(_leaving) = msg.leaving {
                             self.actor.send(move |state| {
-                                Self::handle_leaving_received(state, demux_id);
+                                Self::handle_leaving_received(state, None, demux_id);
                             });
                         }
                         if let Some(reaction) = msg.reaction {
@@ -4371,11 +4385,25 @@ impl Client {
                 {
                     Ok(ready_packets) => {
                         for (buffered_header, sfu_to_device) in ready_packets {
-                            Self::handle_sfu_to_device_inner(
-                                &state.actor,
-                                buffered_header,
-                                sfu_to_device,
-                            )
+                            // If content is present, we should not process any other fields on
+                            // this proto because that would allow for nested protos. Nested protos
+                            // cause thrashing, excessive updates, and hard to follow processing
+                            // order.
+                            if let Some(content) = sfu_to_device.content {
+                                match SfuToDevice::decode(content.as_slice()) {
+                                    Ok(msg) => Self::handle_sfu_to_device_inner(&state.actor, buffered_header, msg),
+                                    Err(err) => {
+                                        error!("Failed to decode content buffer in SfuToDevice: {:?}", err);
+                                    }
+                                }
+                                return;
+                            } else {
+                                Self::handle_sfu_to_device_inner(
+                                    &state.actor,
+                                    buffered_header,
+                                    sfu_to_device,
+                                )
+                            }
                         }
                     }
                     err @ Err(MrpReceiveError::ReceiveWindowFull(_)) => {
@@ -4411,20 +4439,9 @@ impl Client {
             removed,
             raised_hands,
             mrp_header: _,
-            content,
+            content: _,
             endorsements,
         } = msg;
-
-        if let Some(content) = content {
-            match SfuToDevice::decode(content.as_slice()) {
-                Ok(msg) => Self::handle_sfu_to_device_inner(actor, header, msg),
-                Err(err) => {
-                    error!("Failed to decode content buffer in SfuToDevice: {:?}", err);
-                }
-            }
-            // ignore all other fields to prevent ordering issues
-            return;
-        }
 
         if let Some(Speaker {
             demux_id: speaker_demux_id,
@@ -4790,7 +4807,13 @@ impl Client {
         });
     }
 
-    fn handle_leaving_received(state: &mut State, demux_id: DemuxId) {
+    /// Set state that device is leaving. If expected_user_id is provided, then validate the
+    /// demuxID's related userID against it.
+    fn handle_leaving_received(
+        state: &mut State,
+        expected_user_id: Option<UserId>,
+        demux_id: DemuxId,
+    ) {
         // It's likely we haven't received an update from the SFU about this demux_id leaving.
         debug!(
             "Request devices because we just received a leaving message from demux_id = {}",
@@ -4799,6 +4822,13 @@ impl Client {
         if let Some(device) = state.remote_devices.find_by_demux_id_mut(demux_id)
             && !device.leaving_received
         {
+            if expected_user_id.is_some_and(|expected| expected != device.user_id) {
+                warn!(
+                    "Received Leaving message for demux ID {demux_id} but sender's user ID did not match expected user ID, so ignoring"
+                );
+
+                return;
+            }
             device.leaving_received = true;
             Self::request_remote_devices_as_soon_as_possible(state);
 
@@ -5402,6 +5432,7 @@ mod tests {
         era_id: String,
         response_join_state: Arc<Mutex<JoinState>>,
         joins_remaining: Option<Arc<AtomicI64>>,
+        server_dhe_pub_key: [u8; 32],
     }
 
     #[derive(Default)]
@@ -5423,6 +5454,8 @@ mod tests {
             call_creator: Option<UserId>,
             options: FakeSfuClientOptions,
         ) -> Self {
+            let server_secret = EphemeralSecret::random_from_rng(OsRng);
+            let server_dhe_pub_key = *PublicKey::from(&server_secret).as_bytes();
             Self {
                 sfu_info: SfuInfo {
                     udp_addresses: Vec::new(),
@@ -5440,6 +5473,7 @@ mod tests {
                 joins_remaining: options
                     .max_joins
                     .map(|v| Arc::new(AtomicI64::new(v as i64))),
+                server_dhe_pub_key,
             }
         }
 
@@ -5478,7 +5512,7 @@ mod tests {
             client.on_sfu_client_join_attempt_completed(Ok(Joined {
                 sfu_info: self.sfu_info.clone(),
                 local_demux_id: self.local_demux_id,
-                server_dhe_pub_key: [0u8; 32],
+                server_dhe_pub_key: self.server_dhe_pub_key,
                 hkdf_extra_info: b"hkdf_extra_info".to_vec(),
                 creator: self.call_creator.clone(),
                 era_id: self.era_id.clone(),
@@ -7677,6 +7711,60 @@ mod tests {
     }
 
     #[test]
+    fn ignore_leaving_message_from_wrong_sender() {
+        use protobuf::group_call::{DeviceToDevice, device_to_device::Leaving};
+
+        let client1 = TestClient::new(vec![1], 1);
+        client1.connect_join_and_wait_until_joined();
+        let client2 = TestClient::new(vec![2], 2);
+        client2.connect_join_and_wait_until_joined();
+
+        client1.set_remotes_and_wait_until_applied(&[&client2]);
+
+        let fake_group_id = b"fake group ID".to_vec();
+
+        // Use actor task to get state to ensure ordering
+        let get_leaving_received = |client: &TestClient| {
+            let (tx, rx) = mpsc::channel();
+            client.client.actor.send(move |state| {
+                let val = state
+                    .remote_devices
+                    .find_by_demux_id(client2.demux_id)
+                    .map(|d| d.leaving_received)
+                    .unwrap_or(false);
+                tx.send(val).unwrap();
+            });
+            rx.recv_timeout(Duration::from_secs(5)).unwrap()
+        };
+
+        let make_leaving_msg = |group_id: Vec<u8>| DeviceToDevice {
+            group_id: Some(group_id),
+            leaving: Some(Leaving {
+                demux_id: Some(client2.demux_id),
+            }),
+            ..DeviceToDevice::default()
+        };
+
+        let wrong_user_id: UserId = b"wrong_user_id".to_vec();
+        client1
+            .client
+            .on_signaling_message_received(wrong_user_id, make_leaving_msg(fake_group_id.clone()));
+        assert!(
+            !get_leaving_received(&client1),
+            "leaving from wrong sender should be rejected"
+        );
+
+        client1.client.on_signaling_message_received(
+            client2.user_id.clone(),
+            make_leaving_msg(fake_group_id),
+        );
+        assert!(
+            get_leaving_received(&client1),
+            "leaving from correct sender should be accepted"
+        );
+    }
+
+    #[test]
     fn device_to_sfu_remove() {
         use protobuf::group_call::{
             DeviceToSfu,
@@ -9457,6 +9545,21 @@ mod remote_devices_tests {
                 SrtpKeys::from_master_key_material(&server_master_key_material);
             assert_eq!(expected_srtp_keys, srtp_keys);
         };
+    }
+
+    #[test]
+    fn dhe_state_fails_to_negotiate_with_low_order_server_key() {
+        let client_secret = EphemeralSecret::random_from_rng(OsRng);
+        let low_order_server_key = PublicKey::from([0u8; 32]);
+
+        let state = DheState::start(client_secret);
+        assert!(matches!(state, DheState::WaitingForServerPublicKey { .. }));
+
+        let state = state.negotiate(&low_order_server_key, b"hkdf_extra_info");
+        assert!(
+            matches!(state, DheState::FailedToNegotiate { .. }),
+            "expected FailedToNegotiate, got a different DheState variant"
+        );
     }
 
     #[test]
