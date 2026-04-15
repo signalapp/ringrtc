@@ -19,3 +19,4 @@ local.properties
 !.cargo/audit.toml
 target
 .spr.yml
+src/android/.settings

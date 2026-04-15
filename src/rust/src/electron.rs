@@ -1376,10 +1376,7 @@ fn setOutgoingVideoIsScreenShare(mut cx: FunctionContext) -> JsResult<JsValue> {
             .adapt_output_format(width, height, fps);
 
         if let Ok(mut active_connection) = endpoint.call_manager.active_connection() {
-            active_connection.update_sender_status(signaling::SenderStatus {
-                sharing_screen: Some(is_screenshare),
-                ..Default::default()
-            })?;
+            active_connection.send_is_screenshare_update(is_screenshare)?;
         }
         Ok(())
     })

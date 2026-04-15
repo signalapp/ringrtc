@@ -401,7 +401,10 @@ public class CallManager {
 
   /**
    *
-   * Indication from application to proceed with call
+   * Indication from application to proceed with call. Defaults call to:
+   * - videoEnabled == false
+   * - audioEnabled == false
+   * - isScreenshare == false
    *
    * @param callId                 callId for the call
    * @param context                Call service context
@@ -832,15 +835,37 @@ public class CallManager {
    * @throws CallException for native code failures
    *
    */
-  public void setVideoEnable(boolean enable)
+  public void setVideoEnable(boolean enable, boolean isScreenShare)
     throws CallException
   {
     checkCallManagerExists();
 
     CallContext callContext = ringrtcGetActiveCallContext(nativeCallManager);
     callContext.setVideoEnabled(enable);
+    callContext.setOutgoingVideoIsScreenShare(isScreenShare);
 
     ringrtcSetVideoEnable(nativeCallManager, enable);
+  }
+
+  /**
+   *
+   * Notification from application to indicate whether the outgoing video
+   * is a screen share.
+   *
+   * @param isScreenShare  if true, the outgoing video is a screen share
+   *
+   * @throws CallException for native code failures
+   *
+   */
+  public void setOutgoingVideoIsScreenShare(boolean isScreenShare)
+    throws CallException
+  {
+    checkCallManagerExists();
+
+    CallContext callContext = ringrtcGetActiveCallContext(nativeCallManager);
+    callContext.setOutgoingVideoIsScreenShare(isScreenShare);
+
+    ringrtcSetOutgoingVideoIsScreenShare(nativeCallManager, isScreenShare);
   }
 
   /**
@@ -1243,7 +1268,10 @@ public class CallManager {
 
   /**
    *
-   * Creates and returns a GroupCall object.
+   * Creates and returns a GroupCall object. Defaults call to:
+   * - videoEnabled == false
+   * - audioEnabled == false
+   * - isScreenshare == false
    *
    * If there is any error when allocating resources for the object,
    * null is returned.
@@ -1289,7 +1317,11 @@ public class CallManager {
 
   /**
    *
-   * Creates and returns a GroupCall object for a call link call.
+   * Creates and returns a GroupCall object for a call link call. Defaults call to:
+   * - videoEnabled == false
+   * - audioEnabled == false
+   * - isScreenshare == false
+   *
    *
    * If there is any error when allocating resources for the object,
    * null is returned.
@@ -1883,6 +1915,14 @@ public class CallManager {
    */
   static class CallContext {
 
+    public  static final int       CAMERA_MAX_WIDTH    = 1280;
+
+    public  static final int       CAMERA_MAX_HEIGHT   = 720;
+
+    public  static final int       CAMERA_MAX_FPS      = 30;
+
+    public  static final int       SCREENSHARE_MAX_FPS = 30;
+
     @NonNull  private final String TAG = CallManager.CallContext.class.getSimpleName();
     /** CallId */
     @NonNull  public final  CallId                         callId;
@@ -1940,6 +1980,20 @@ public class CallManager {
       if (videoTrack != null) {
         videoTrack.setEnabled(enable);
         cameraControl.setEnabled(enable);
+      }
+    }
+
+    void setOutgoingVideoIsScreenShare(boolean isScreenShare) {
+      if (this.videoSource != null) {
+        this.videoSource.setIsScreencast(isScreenShare);
+
+        if (isScreenShare) {
+          this.videoSource.adaptOutputFormat(VideoSource.AspectRatio.UNDEFINED, null, VideoSource.AspectRatio.UNDEFINED, null, SCREENSHARE_MAX_FPS);
+        } else {
+          this.videoSource.adaptOutputFormat(CAMERA_MAX_WIDTH, CAMERA_MAX_HEIGHT, CAMERA_MAX_FPS);
+        }
+      } else {
+        Log.w(TAG, "setOutgoingVideoIsScreenShare(): tried to set isScreenshare but there is no VideoSource");
       }
     }
 
@@ -2618,6 +2672,10 @@ public class CallManager {
 
   private native
     void ringrtcSetVideoEnable(long nativeCallManager, boolean enable)
+    throws CallException;
+
+  private native
+    void ringrtcSetOutgoingVideoIsScreenShare(long nativeCallManager, boolean isScreenShare)
     throws CallException;
 
   private native

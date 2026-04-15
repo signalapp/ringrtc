@@ -558,6 +558,20 @@ pub fn set_video_enable(call_manager: *mut AndroidCallManager, enable: bool) -> 
     }
 }
 
+/// CMI request to set whether the outgoing video is a screen share
+pub fn set_outgoing_video_is_screenshare(
+    call_manager: *mut AndroidCallManager,
+    is_screenshare: bool,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+
+    if let Ok(mut active_connection) = call_manager.active_connection() {
+        active_connection.send_is_screenshare_update(is_screenshare)
+    } else {
+        Ok(())
+    }
+}
+
 /// Request to update the data mode on the direct connection
 pub fn update_data_mode(call_manager: *mut AndroidCallManager, data_mode: DataMode) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
@@ -1048,6 +1062,26 @@ pub fn set_outgoing_video_muted(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.set_outgoing_video_muted(client_id, muted);
+    Ok(())
+}
+
+pub fn set_presenting(
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    presenting: bool,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_presenting(client_id, presenting);
+    Ok(())
+}
+
+pub fn set_outgoing_group_call_video_is_screenshare(
+    call_manager: *mut AndroidCallManager,
+    client_id: group_call::ClientId,
+    is_screenshare: bool,
+) -> Result<()> {
+    let call_manager = unsafe { ptr_as_mut(call_manager)? };
+    call_manager.set_sharing_screen(client_id, is_screenshare);
     Ok(())
 }
 

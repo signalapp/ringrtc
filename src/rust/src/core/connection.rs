@@ -1606,6 +1606,13 @@ where
         call.connect_incoming_media(incoming_media)
     }
 
+    pub fn send_is_screenshare_update(&mut self, is_screenshare: bool) -> Result<()> {
+        self.update_sender_status(signaling::SenderStatus {
+            sharing_screen: Some(is_screenshare),
+            ..Default::default()
+        })
+    }
+
     /// Send a ConnectionEvent to the internal FSM.
     fn inject_event(&mut self, event: ConnectionEvent) -> Result<()> {
         self.fsm_sender

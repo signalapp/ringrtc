@@ -40,6 +40,14 @@ public final class GroupCall {
 
              public  static final int    INVALID_CLIENT_ID = 0;
 
+             public  static final int    CAMERA_MAX_WIDTH  = 640;
+
+             public  static final int    CAMERA_MAX_HEIGHT = 360;
+
+             public  static final int    CAMERA_MAX_FPS    = 30;
+
+             public  static final int    SCREENSHARE_MAX_FPS    = 30;
+
     @NonNull private static final String TAG = GroupCall.class.getSimpleName();
 
     @NonNull  private Kind                               kind;
@@ -101,7 +109,7 @@ public final class GroupCall {
             this.outgoingAudioTrack.setEnabled(false);
         }
 
-        this.outgoingVideoSource = factory.createVideoSource(false);
+        this.outgoingVideoSource = factory.createVideoSource(/* isScreencast */false);
         if (this.outgoingVideoSource == null) {
             return;
         }
@@ -114,14 +122,17 @@ public final class GroupCall {
             this.outgoingVideoTrack.setEnabled(false);
         }
 
-        // Define maximum output video format for group calls.
-        this.outgoingVideoSource.adaptOutputFormat(640, 360, 30);
+        // Define maximum camera video format for group calls.
+        this.outgoingVideoSource.adaptOutputFormat(CAMERA_MAX_WIDTH, CAMERA_MAX_HEIGHT, CAMERA_MAX_FPS);
 
         this.incomingVideoTracks = new ArrayList<>();
     }
 
     /**
-     * Creates a GroupCall object.
+     * Creates a GroupCall object. Defaults call to:
+     * - videoEnabled == false
+     * - audioEnabled == false
+     * - isScreenshare == false
      *
      * Will return null on failure. Should only be accessed via the CallManager.createGroupCall().
      */
@@ -436,15 +447,60 @@ public final class GroupCall {
      * @throws CallException for native code failures
      *
      */
-    public void setOutgoingVideoMuted(boolean muted)
+    public void setOutgoingVideoMuted(boolean muted, boolean isScreenShare)
         throws CallException
     {
         Log.i(TAG, "setOutgoingVideoMuted():");
 
         this.localDeviceState.videoMuted = muted;
         this.outgoingVideoTrack.setEnabled(!this.localDeviceState.videoMuted);
+        this.setOutgoingVideoIsScreenShare(isScreenShare);
 
         ringrtcSetOutgoingVideoMuted(nativeCallManager, this.clientId, muted);
+    }
+
+    /**
+     *
+     * Indicates whether the outgoing video is a screen share.
+     * This updates the local device state and sends the status to the SFU.
+     *
+     * @param isScreenShare  true if the outgoing video is a screen share
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void setOutgoingVideoIsScreenShare(boolean isScreenShare)
+        throws CallException
+    {
+        Log.i(TAG, String.format("setOutgoingVideoIsScreenShare(): %b", isScreenShare));
+
+        this.outgoingVideoSource.setIsScreencast(isScreenShare);
+        if (isScreenShare) {
+          this.outgoingVideoSource.adaptOutputFormat(VideoSource.AspectRatio.UNDEFINED, null, VideoSource.AspectRatio.UNDEFINED, null, SCREENSHARE_MAX_FPS);
+        } else {
+          this.outgoingVideoSource.adaptOutputFormat(CAMERA_MAX_WIDTH, CAMERA_MAX_HEIGHT, CAMERA_MAX_FPS);
+        }
+
+        this.localDeviceState.sharingScreen = isScreenShare;
+        ringrtcSetOutgoingVideoIsScreenShare(nativeCallManager, this.clientId, isScreenShare);
+    }
+
+    /**
+     *
+     * Indicates whether the user is presenting.
+     * This updates the local device state and sends the status to the SFU.
+     *
+     * @param isPresenting  true if the outgoing video is a screen share
+     *
+     * @throws CallException for native code failures
+     *
+     */
+    public void setPresenting(boolean isPresenting)
+        throws CallException
+    {
+        Log.i(TAG, "setPresenting():");
+        this.localDeviceState.presenting = isPresenting;
+        ringrtcSetPresenting(nativeCallManager, this.clientId, isPresenting);
     }
 
     /**
@@ -990,6 +1046,8 @@ public final class GroupCall {
                   JoinState       joinState;
                   boolean         audioMuted;
                   boolean         videoMuted;
+                  boolean         presenting;
+                  boolean         sharingScreen;
                   NetworkRoute    networkRoute;
                   int             audioLevel;
         @Nullable Long            demuxId;
@@ -999,6 +1057,8 @@ public final class GroupCall {
             this.joinState = JoinState.NOT_JOINED;
             this.audioMuted = true;
             this.videoMuted = true;
+            this.presenting = false;
+            this.sharingScreen = false;
             this.networkRoute = new NetworkRoute();
             this.audioLevel = 0;
         }
@@ -1008,6 +1068,8 @@ public final class GroupCall {
             this.joinState = localDeviceState.joinState;
             this.audioMuted = localDeviceState.audioMuted;
             this.videoMuted = localDeviceState.videoMuted;
+            this.presenting = localDeviceState.presenting;
+            this.sharingScreen = localDeviceState.sharingScreen;
             this.networkRoute = localDeviceState.networkRoute;
             this.audioLevel = localDeviceState.audioLevel;
             this.demuxId = localDeviceState.demuxId;
@@ -1027,6 +1089,14 @@ public final class GroupCall {
 
         public boolean getVideoMuted() {
             return videoMuted;
+        }
+
+        public boolean getPresenting() {
+            return presenting;
+        }
+
+        public boolean getSharingScreen() {
+            return sharingScreen;
         }
 
         public NetworkRoute getNetworkRoute() {
@@ -1373,6 +1443,18 @@ public final class GroupCall {
         void ringrtcSetOutgoingVideoMuted(long nativeCallManager,
                                           long clientId,
                                           boolean muted)
+        throws CallException;
+
+    private native
+        void ringrtcSetPresenting(long nativeCallManager,
+                                  long clientId,
+                                  boolean isPresenting)
+        throws CallException;
+
+    private native
+        void ringrtcSetOutgoingVideoIsScreenShare(long nativeCallManager,
+                                                  long clientId,
+                                                  boolean isScreenShare)
         throws CallException;
 
     private native

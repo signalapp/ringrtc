@@ -563,6 +563,25 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetVideoEnab
 
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcSetOutgoingVideoIsScreenShare(
+    mut env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    is_screenshare: jboolean,
+) {
+    match call_manager::set_outgoing_video_is_screenshare(
+        call_manager as *mut AndroidCallManager,
+        is_screenshare != 0,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&mut env, e);
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
 pub extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcUpdateDataMode(
     mut env: JNIEnv,
     _object: JObject,
@@ -1049,6 +1068,48 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingVid
         call_manager as *mut AndroidCallManager,
         client_id as group_call::ClientId,
         muted,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&mut env, e);
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetPresenting(
+    mut env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    presenting: jboolean,
+) {
+    match call_manager::set_presenting(
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        presenting != 0,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error::throw_error(&mut env, e);
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+#[allow(non_snake_case)]
+pub unsafe extern "C" fn Java_org_signal_ringrtc_GroupCall_ringrtcSetOutgoingVideoIsScreenShare(
+    mut env: JNIEnv,
+    _object: JObject,
+    call_manager: jlong,
+    client_id: jlong,
+    is_screenshare: jboolean,
+) {
+    match call_manager::set_outgoing_group_call_video_is_screenshare(
+        call_manager as *mut AndroidCallManager,
+        client_id as group_call::ClientId,
+        is_screenshare != 0,
     ) {
         Ok(v) => v,
         Err(e) => {
