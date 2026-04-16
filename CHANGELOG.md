@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.68.0
+
+- Add Android screenshare support
+
+- ADM: Avoid C++ layer for device enumeration / selection
+
+- Update to webrtc 7680c
+  - ADM: avoid using C++ layer to proxy updates and ignore WebRTC's device selection choices
+
+- Update dependencies
+
+- Fix various validations in Signaling and in SfuToDevice RTP
+
 ## v2.67.3
 
 - iOS: Move method calls inside buffer accesses
