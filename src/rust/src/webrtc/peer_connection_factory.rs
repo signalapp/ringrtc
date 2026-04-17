@@ -491,7 +491,7 @@ impl PeerConnectionFactory {
     }
 
     #[cfg(feature = "native")]
-    pub fn set_audio_playout_device(&mut self, index: u16) -> Result<()> {
+    pub fn set_audio_playout_device(&mut self, index: usize) -> Result<()> {
         #[cfg(target_os = "windows")]
         // Swap the first two devices back to ordinal if either are selected.
         let index = match index {
@@ -505,19 +505,8 @@ impl PeerConnectionFactory {
         self.adm.as_ref().and_then(|adm| adm.lock().ok()).map_or(
             Err(anyhow!("couldn't access ADM")),
             |mut adm| {
-                // We need to stop and restart playout if it's already in progress.
-                let was_initialized = adm.playout_is_initialized();
-                let was_playing = adm.playing();
-                if was_initialized && adm.stop_playout() != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                if adm.set_playout_device(index) != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                if was_initialized && adm.init_playout() != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                if was_playing && adm.start_playout() != 0 {
+                if let Err(e) = adm.set_playout_device(index) {
+                    error!("Failed to set playout device: {}", e);
                     return Err(RingRtcError::SetAudioDevice.into());
                 }
                 Ok(())
@@ -530,17 +519,8 @@ impl PeerConnectionFactory {
         self.adm.as_ref().and_then(|adm| adm.lock().ok()).map_or(
             Err(anyhow!("couldn't access ADM")),
             |mut adm| {
-                // We need to stop and restart playout if it's already in progress.
-                let was_initialized = adm.playout_is_initialized();
-                let was_playing = adm.playing();
-                if was_initialized && adm.stop_playout() != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                adm.set_playout_device_by_id(device_id)?;
-                if was_initialized && adm.init_playout() != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                if was_playing && adm.start_playout() != 0 {
+                if let Err(e) = adm.set_playout_device_by_id(device_id) {
+                    error!("Failed to set playout device: {}", e);
                     return Err(RingRtcError::SetAudioDevice.into());
                 }
                 Ok(())
@@ -588,7 +568,7 @@ impl PeerConnectionFactory {
     }
 
     #[cfg(feature = "native")]
-    pub fn set_audio_recording_device(&mut self, index: u16) -> Result<()> {
+    pub fn set_audio_recording_device(&mut self, index: usize) -> Result<()> {
         #[cfg(target_os = "windows")]
         // Swap the first two devices back to ordinal if either are selected.
         let index = match index {
@@ -605,19 +585,8 @@ impl PeerConnectionFactory {
         self.adm.as_ref().and_then(|adm| adm.lock().ok()).map_or(
             Err(anyhow!("couldn't access ADM")),
             |mut adm| {
-                // We need to stop and restart recording if it is already in progress.
-                let was_initialized = adm.recording_is_initialized();
-                let was_recording = adm.recording();
-                if was_initialized && adm.stop_recording() != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                if adm.set_recording_device(index) != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                if was_initialized && adm.init_recording() != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                if was_recording && adm.start_recording() != 0 {
+                if let Err(e) = adm.set_recording_device(index) {
+                    error!("Failed to set recording device: {}", e);
                     return Err(RingRtcError::SetAudioDevice.into());
                 }
                 Ok(())
@@ -630,17 +599,8 @@ impl PeerConnectionFactory {
         self.adm.as_ref().and_then(|adm| adm.lock().ok()).map_or(
             Err(anyhow!("couldn't access ADM")),
             |mut adm| {
-                // We need to stop and restart recording if it is already in progress.
-                let was_initialized = adm.recording_is_initialized();
-                let was_recording = adm.recording();
-                if was_initialized && adm.stop_recording() != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                adm.set_recording_device_by_id(device_id)?;
-                if was_initialized && adm.init_recording() != 0 {
-                    return Err(RingRtcError::SetAudioDevice.into());
-                }
-                if was_recording && adm.start_recording() != 0 {
+                if let Err(e) = adm.set_recording_device_by_id(device_id) {
+                    error!("Failed to set recording device: {}", e);
                     return Err(RingRtcError::SetAudioDevice.into());
                 }
                 Ok(())

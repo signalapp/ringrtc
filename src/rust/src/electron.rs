@@ -2256,7 +2256,7 @@ fn getAudioInputs(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn setAudioInput(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let index = cx.argument::<JsNumber>(0)?.value(&mut cx) as u16;
+    let index = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
     match with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .peer_connection_factory
@@ -2296,7 +2296,7 @@ fn getAudioOutputs(mut cx: FunctionContext) -> JsResult<JsValue> {
 
 #[allow(non_snake_case)]
 fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let index = cx.argument::<JsNumber>(0)?.value(&mut cx) as u16;
+    let index = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
     match with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .peer_connection_factory

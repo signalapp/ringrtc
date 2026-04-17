@@ -53,14 +53,6 @@ pub enum AudioLayer {
     DummyAudio,
 }
 
-// Stays in sync with WindowsDeviceType in webrtc
-#[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WindowsDeviceType {
-    DefaultCommunicationDevice = -1,
-    DefaultDevice = -2,
-}
-
 /// Return type for need_more_play_data
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -81,9 +73,9 @@ type OutFrame = StereoFrame<i16>;
 #[derive(Debug)]
 enum Event {
     RefreshCache(DeviceType),
-    SetPlayoutDevice(u16),
+    SetPlayoutDevice(usize),
     SetPlayoutDeviceById(String),
-    SetRecordingDevice(u16),
+    SetRecordingDevice(usize),
     SetRecordingDeviceById(String),
     InitPlayout,
     StartPlayout,
@@ -123,6 +115,8 @@ struct Worker {
     output_device_names: Arc<Mutex<Vec<Option<AudioDevice>>>>,
     audio_device_observer: Option<Box<dyn AudioDeviceObserver>>,
     send_to_webrtc: Arc<AtomicBool>,
+    should_play: bool,
+    should_record: bool,
 }
 
 impl Worker {
@@ -265,6 +259,10 @@ impl Worker {
     fn init_playout(&mut self) -> anyhow::Result<()> {
         let out_device = if let Some(device) = self.playout_device {
             device
+        } else if let Some(d) = self.output_device_cache.get(0) {
+            // Use system default device if nothing is initialized
+            self.playout_device = Some(d.devid);
+            d.devid
         } else {
             bail!("Tried to init playout without a playout device");
         };
@@ -364,6 +362,7 @@ impl Worker {
     }
 
     fn start_playout(&mut self) -> anyhow::Result<()> {
+        self.should_play = true;
         if let Some(output_stream) = &self.output_stream {
             if let Err(e) = output_stream.start() {
                 bail!("Failed to start playout: {}", e);
@@ -375,12 +374,30 @@ impl Worker {
     }
 
     fn stop_playout(&mut self) -> anyhow::Result<()> {
+        self.should_play = false;
         if let Some(output_stream) = &self.output_stream {
             if let Err(e) = output_stream.stop() {
                 bail!("Failed to stop playout: {}", e);
             }
             // Drop the stream so that it isn't reused on future calls.
             self.output_stream = None;
+        }
+        Ok(())
+    }
+
+    // Update the playout device, stopping and resuming playout if needed.
+    fn update_playout_device(&mut self, id: DeviceId) -> anyhow::Result<()> {
+        let was_initialized = self.output_stream.is_some();
+        let was_playing = self.should_play;
+        if was_initialized {
+            self.stop_playout()?;
+        }
+        self.playout_device = Some(id);
+        if was_initialized {
+            self.init_playout()?;
+        }
+        if was_playing {
+            self.start_playout()?;
         }
         Ok(())
     }
@@ -394,6 +411,10 @@ impl Worker {
 
         let recording_device = if let Some(device) = self.recording_device {
             device
+        } else if let Some(d) = self.input_device_cache.get(0) {
+            // Use system default device if nothing is initialized
+            self.recording_device = Some(d.devid);
+            d.devid
         } else {
             bail!("Tried to init recording without a recording device");
         };
@@ -486,6 +507,7 @@ impl Worker {
     }
 
     fn start_recording(&mut self, send_to_webrtc: bool) -> anyhow::Result<()> {
+        self.should_record = true;
         let was_sending = self.send_to_webrtc.swap(send_to_webrtc, Ordering::SeqCst);
         if !was_sending {
             // We were warming up; all we need to do is start sending to webrtc (or continue warmup).
@@ -504,6 +526,7 @@ impl Worker {
     }
 
     fn stop_recording(&mut self) -> anyhow::Result<()> {
+        self.should_record = false;
         if let Some(input_stream) = &self.input_stream {
             let res = input_stream.stop();
             // Reset **after** we stop recording to avoid sending data to webrtc incorrectly
@@ -513,6 +536,24 @@ impl Worker {
             }
             // Drop the stream so that it isn't reused on future calls.
             self.input_stream = None;
+        }
+        Ok(())
+    }
+
+    // Update the recording device, stopping and resuming recording if needed.
+    fn update_recording_device(&mut self, id: DeviceId) -> anyhow::Result<()> {
+        let was_initialized = self.input_stream.is_some();
+        let was_playing = self.should_record;
+        let was_sending_webrtc = self.send_to_webrtc.load(Ordering::SeqCst);
+        if was_initialized {
+            self.stop_recording()?;
+        }
+        self.recording_device = Some(id);
+        if was_initialized {
+            self.init_recording()?;
+        }
+        if was_playing {
+            self.start_recording(was_sending_webrtc)?;
         }
         Ok(())
     }
@@ -542,9 +583,8 @@ impl Worker {
             if let Err(e) = match received {
                 Event::RefreshCache(d) => self.refresh_device_cache(d),
                 Event::SetPlayoutDevice(index) => {
-                    if let Some(d) = self.output_device_cache.get(index.into()) {
-                        self.playout_device = Some(d.devid);
-                        Ok(())
+                    if let Some(d) = self.output_device_cache.get(index) {
+                        self.update_playout_device(d.devid)
                     } else {
                         Err(anyhow!(
                             "Invalid playout device index {} requested (len {:?})",
@@ -559,8 +599,7 @@ impl Worker {
                             .as_ref()
                             .is_some_and(|actual_id| actual_id == id)
                     }) {
-                        self.playout_device = Some(d.devid);
-                        Ok(())
+                        self.update_playout_device(d.devid)
                     } else {
                         Err(anyhow!(
                             "Invalid playout device id {} requested",
@@ -569,16 +608,8 @@ impl Worker {
                     }
                 }
                 Event::SetRecordingDevice(index) => {
-                    if !self.send_to_webrtc.load(Ordering::SeqCst)
-                        && self.input_stream.is_some()
-                        && let Err(e) = self.stop_recording()
-                    {
-                        warn!("Failed to stop recording: {}", e);
-                    }
-
-                    if let Some(d) = self.input_device_cache.get(index.into()) {
-                        self.recording_device = Some(d.devid);
-                        Ok(())
+                    if let Some(d) = self.input_device_cache.get(index) {
+                        self.update_recording_device(d.devid)
                     } else {
                         Err(anyhow!(
                             "Invalid playout device index {} requested (len {:?})",
@@ -593,8 +624,7 @@ impl Worker {
                             .as_ref()
                             .is_some_and(|actual_id| actual_id == id)
                     }) {
-                        self.recording_device = Some(d.devid);
-                        Ok(())
+                        self.update_recording_device(d.devid)
                     } else {
                         Err(anyhow!(
                             "Invalid recording device id {} requested",
@@ -768,6 +798,8 @@ impl Worker {
                 output_device_names,
                 audio_device_observer: None,
                 send_to_webrtc: Arc::new(AtomicBool::new(true)),
+                should_play: false,
+                should_record: false,
             };
             if let Err(e) = worker.register_device_collection_changed(DeviceType::INPUT) {
                 error!("Failed to register input device callback: {}", e);
@@ -1191,129 +1223,6 @@ impl AudioDeviceModule {
         }
     }
 
-    // Device selection
-    pub fn set_playout_device(&mut self, index: u16) -> i32 {
-        match self.enumerate_devices(DeviceType::OUTPUT) {
-            Ok(devices) => match devices.get(index as usize) {
-                Some(_) => {
-                    if let Err(e) = self.mpsc_sender.send(Event::SetPlayoutDevice(index)) {
-                        error!("Failed to request SetPlayoutDevice: {}", e);
-                        return -1;
-                    }
-                }
-                None => {
-                    warn!(
-                        "Invalid playout device index {} requested (len {})",
-                        index,
-                        devices.len()
-                    );
-                    if devices.is_empty() {
-                        info!("Likely failed due to benign startup race");
-                        return 0;
-                    }
-                    return -1;
-                }
-            },
-            Err(e) => {
-                error!("failed to enumerate devices for playout device: {}", e);
-                return -1;
-            }
-        };
-        self.has_playout_device = true;
-        0
-    }
-
-    fn set_device_by_id(
-        &mut self,
-        id: &str,
-        device_type: DeviceType,
-        event: Event,
-    ) -> anyhow::Result<()> {
-        let devices = self.enumerate_devices(device_type)?;
-        // Do a quick plausibility check to see if we know about this device.
-        // Of course, the worker will still have to check again in case the device gets unplugged,
-        // but we can fail fast in the common case.
-        if devices
-            .iter()
-            .any(|dopt| dopt.as_ref().is_some_and(|d| d.unique_id == id))
-        {
-            if let Err(e) = self.mpsc_sender.send(event) {
-                bail!("Failed to request Set*DeviceById {}", e);
-            }
-        } else {
-            if devices.is_empty() {
-                info!("Likely failed to get device due to benign startup race");
-            }
-            bail!("No device with ID {}", redact_for_logging(id));
-        }
-        Ok(())
-    }
-
-    pub fn set_playout_device_by_id(&mut self, id: &str) -> anyhow::Result<()> {
-        self.set_device_by_id(
-            id,
-            DeviceType::OUTPUT,
-            Event::SetPlayoutDeviceById(id.to_string()),
-        )
-    }
-
-    pub fn set_playout_device_win(&mut self, device: WindowsDeviceType) -> i32 {
-        // DefaultDevice is at index 0 and DefaultCommunicationDevice at index 1
-        self.set_playout_device(if device == WindowsDeviceType::DefaultDevice {
-            0
-        } else {
-            1
-        })
-    }
-
-    pub fn set_recording_device(&mut self, index: u16) -> i32 {
-        match self.enumerate_devices(DeviceType::INPUT) {
-            Ok(devices) => match devices.get(index as usize) {
-                Some(_) => {
-                    if let Err(e) = self.mpsc_sender.send(Event::SetRecordingDevice(index)) {
-                        error!("Failed to request SetRecordingDevice: {}", e);
-                        return -1;
-                    }
-                }
-                None => {
-                    warn!(
-                        "Invalid recording device index {} requested (len {})",
-                        index,
-                        devices.len()
-                    );
-                    if devices.is_empty() {
-                        info!("Likely failed due to benign startup race");
-                        return 0;
-                    }
-                    return -1;
-                }
-            },
-            Err(e) => {
-                error!("failed to enumerate devices for playout device: {}", e);
-                return -1;
-            }
-        };
-        self.has_recording_device = true;
-        0
-    }
-
-    pub fn set_recording_device_by_id(&mut self, id: &str) -> anyhow::Result<()> {
-        self.set_device_by_id(
-            id,
-            DeviceType::INPUT,
-            Event::SetRecordingDeviceById(id.to_string()),
-        )
-    }
-
-    pub fn set_recording_device_win(&mut self, device: WindowsDeviceType) -> i32 {
-        // DefaultDevice is at index 0 and DefaultCommunicationDevice at index 1
-        self.set_recording_device(if device == WindowsDeviceType::DefaultDevice {
-            0
-        } else {
-            1
-        })
-    }
-
     // Audio transport initialization
     pub fn playout_is_available(&self, available_out: webrtc::ptr::Borrowed<bool>) -> i32 {
         let available = self.has_playout_device;
@@ -1616,6 +1525,111 @@ impl AudioDeviceModule {
             return Err(anyhow!("Failed to request WarmupRecording: {}", e));
         }
         Ok(())
+    }
+
+    fn set_device_by_id(
+        &mut self,
+        id: &str,
+        device_type: DeviceType,
+        event: Event,
+    ) -> anyhow::Result<()> {
+        let devices = self.enumerate_devices(device_type)?;
+        // Do a quick plausibility check to see if we know about this device.
+        // Of course, the worker will still have to check again in case the device gets unplugged,
+        // but we can fail fast in the common case.
+        if devices
+            .iter()
+            .any(|dopt| dopt.as_ref().is_some_and(|d| d.unique_id == id))
+        {
+            if let Err(e) = self.mpsc_sender.send(event) {
+                bail!("Failed to request Set*DeviceById {}", e);
+            }
+        } else {
+            if devices.is_empty() {
+                info!("Likely failed to get device due to benign startup race");
+            }
+            bail!("No device with ID {}", redact_for_logging(id));
+        }
+        Ok(())
+    }
+
+    pub fn set_playout_device_by_id(&mut self, id: &str) -> anyhow::Result<()> {
+        self.set_device_by_id(
+            id,
+            DeviceType::OUTPUT,
+            Event::SetPlayoutDeviceById(id.to_string()),
+        )
+    }
+
+    pub fn set_recording_device_by_id(&mut self, id: &str) -> anyhow::Result<()> {
+        self.set_device_by_id(
+            id,
+            DeviceType::INPUT,
+            Event::SetRecordingDeviceById(id.to_string()),
+        )
+    }
+
+    fn set_device_by_index(&mut self, index: usize, device_type: DeviceType) -> anyhow::Result<()> {
+        let event = match device_type {
+            DeviceType::INPUT => Event::SetRecordingDevice(index),
+            DeviceType::OUTPUT => Event::SetPlayoutDevice(index),
+            _ => bail!("Unsupported device type: {:?}", device_type),
+        };
+        match self.enumerate_devices(device_type) {
+            Ok(devices) => match devices.get(index) {
+                Some(_) => {
+                    if let Err(e) = self.mpsc_sender.send(event) {
+                        Err(anyhow!(
+                            "Failed to send {:?} device change event: {}",
+                            device_type,
+                            e
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                }
+                None => {
+                    warn!(
+                        "Invalid {:?} device index {} requested (len {})",
+                        device_type,
+                        index,
+                        devices.len()
+                    );
+                    if devices.is_empty() {
+                        info!("Likely failed due to benign startup race");
+                        Ok(())
+                    } else {
+                        bail!(
+                            "Invalid {:?} device index {} requested (len {})",
+                            device_type,
+                            index,
+                            devices.len()
+                        );
+                    }
+                }
+            },
+            Err(e) => Err(anyhow!(
+                "failed to enumerate {:?} devices: {}",
+                device_type,
+                e
+            )),
+        }
+    }
+
+    pub fn set_playout_device(&mut self, index: usize) -> anyhow::Result<()> {
+        let out = self.set_device_by_index(index, DeviceType::OUTPUT);
+        if out.is_ok() {
+            self.has_playout_device = true;
+        }
+        out
+    }
+
+    pub fn set_recording_device(&mut self, index: usize) -> anyhow::Result<()> {
+        let out = self.set_device_by_index(index, DeviceType::INPUT);
+        if out.is_ok() {
+            self.has_recording_device = true;
+        }
+        out
     }
 }
 
