@@ -12,7 +12,7 @@ use crate::webrtc::ffi::media;
 pub use crate::webrtc::peer_connection_factory::RffiPeerConnectionFactoryOwner;
 #[cfg(feature = "sim")]
 use crate::webrtc::sim::media;
-use crate::{lite::sfu::DemuxId, webrtc};
+use crate::{core::assets::AssetRegistry, lite::sfu::DemuxId, webrtc};
 
 /// Rust wrapper around WebRTC C++ MediaStream object.
 #[derive(Clone, Debug)]
@@ -540,4 +540,52 @@ impl AudioDecoderConfig {
             complexity: self.complexity.map(|c| c as i32).unwrap_or(-1),
         }
     }
+}
+
+/// If dred_duration > 0, looks up DNN weights from the asset registry
+/// and configures both encoder and decoder for DRED. If no weights are
+/// found, disables DRED by setting dred_duration to 0.
+pub fn configure_dred_from_assets(
+    asset_registry: &AssetRegistry,
+    encoder_config: &mut AudioEncoderConfig,
+    decoder_config: &mut AudioDecoderConfig,
+) {
+    // Don't load assets if we aren't using DRED or building for the Call Simulator.
+    if cfg!(feature = "call_sim") || encoder_config.dred_duration == 0 {
+        return;
+    }
+
+    info!("assets: Checking for opus-dred assets in the registry...");
+    if let Some(versions) = asset_registry.get_options_for("opus-dred") {
+        info!(
+            "assets: There are {} opus-dred asset versions available",
+            versions.len()
+        );
+        if let Some(version) = versions.first() {
+            if let Some(asset) = asset_registry.get_asset("opus-dred", *version) {
+                info!("assets: opus-dred asset version {version} found");
+
+                // Set the weights on both the encoder and decoder.
+                // Lifetime: Each clone of the Arc<asset_content> will be held by
+                // a connection or group call object which lives as long as the
+                // PeerConnection in WebRTC.
+                encoder_config.dnn_weights = Some(Arc::clone(&asset.content));
+                decoder_config.dnn_weights = Some(asset.content);
+
+                // Disable FEC when using DRED.
+                encoder_config.enable_fec = false;
+
+                return;
+            } else {
+                warn!("assets: Failed to get opus-dred asset version {version}!");
+            }
+        } else {
+            warn!("assets: No versions found for opus-dred!");
+        }
+    } else {
+        warn!("assets: No opus-dred assets found!");
+    }
+
+    warn!("assets: Disabling DRED since no dnn weights were found!");
+    encoder_config.dred_duration = 0;
 }

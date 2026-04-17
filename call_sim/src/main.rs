@@ -993,6 +993,99 @@ async fn run_plc_tests(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
+async fn run_dred_tests(test: &mut Test) -> Result<()> {
+    let configs = [
+        (60, true, 0, Some(0)),    // Before DRED with FEC and Opus PLC
+        (60, false, 6, Some(5)),   // DRED 60ms
+        (60, false, 12, Some(5)),  // DRED 120ms
+        (60, false, 25, Some(5)),  // DRED 250ms
+        (60, false, 50, Some(5)),  // DRED 500ms
+        (60, false, 100, Some(5)), // DRED 1s
+    ];
+
+    let losses = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
+
+    let test_cases: Vec<_> = configs
+        .iter()
+        .flat_map(|&(initial_packet_size_ms, enable_fec, dred_duration, decoder_complexity)| {
+            losses.iter().map(move |&loss| TestCaseConfig {
+                test_case_name: format!(
+                    "ptime_{initial_packet_size_ms}-fec_{enable_fec}-dred_duration_{dred_duration}-plc_{}-loss_{loss}",
+                    decoder_complexity.map_or("None".to_string(), |c| c.to_string())
+                ),
+                length_seconds: 30,
+                client_a_config: CallConfig {
+                    audio: AudioConfig {
+                        input_name: "normal_phrasing".to_string(),
+                        generate_spectrogram: false,
+                        visqol_speech_analysis: false,
+                        visqol_audio_analysis: false,
+                        pesq_speech_analysis: false,
+                        plc_speech_analysis: false,
+                        complexity: 9,
+                        initial_packet_size_ms,
+                        enable_fec,
+                        dred_duration,
+                        decoder_complexity,
+                        // Force DRED to be encoded with the expected loss rate.
+                        min_packet_loss_percent: if dred_duration > 0 { loss } else { 0 },
+                        // Only used for Deep PLC (decoder complexity 5) or DRED tests.
+                        dnn_weights_path: "/data/deep_plc-dred-weights.bin".to_string(),
+                        ..Default::default()
+                    },
+                    profile: DeterministicLoss(loss),
+                    ..Default::default()
+                },
+                client_b_config: CallConfig {
+                    audio: AudioConfig {
+                        input_name: "normal_phrasing".to_string(),
+                        visqol_speech_analysis: true,
+                        visqol_audio_analysis: true,
+                        pesq_speech_analysis: true,
+                        plc_speech_analysis: true,
+                        complexity: 9,
+                        initial_packet_size_ms,
+                        enable_fec,
+                        dred_duration,
+                        decoder_complexity,
+                        // Force DRED to be encoded with the expected loss rate.
+                        min_packet_loss_percent: if dred_duration > 0 { loss } else { 0 },
+                        // Only used for Deep PLC (decoder complexity 5) or DRED tests.
+                        dnn_weights_path: "/data/deep_plc-dred-weights.bin".to_string(),
+                        ..Default::default()
+                    },
+                    profile: DeterministicLoss(loss),
+                    ..Default::default()
+                },
+                iterations: 3,
+                ..Default::default()
+            })
+        })
+        .collect();
+
+    test.run(
+        GroupConfig {
+            group_name: "dred_tests".to_string(),
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_speech: true,
+                show_visqol_mos_audio: true,
+                show_pesq_mos: true,
+                show_plc_mos: true,
+                show_video: false,
+                show_send_stats: false,
+                show_dred_stats: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        test_cases,
+        vec![NetworkProfile::None],
+    )
+    .await?;
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -1078,6 +1171,7 @@ async fn main() -> Result<()> {
             "changing_bandwidth_audio_test" => run_changing_bandwidth_audio_test(test).await?,
             "profiling_suite" => run_perf_test(test).await?,
             "plc_tests" => run_plc_tests(test).await?,
+            "dred_tests" => run_dred_tests(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
         }
         test.report().await?;

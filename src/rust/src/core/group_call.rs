@@ -63,7 +63,8 @@ use crate::{
     webrtc::{
         self,
         media::{
-            AudioEncoderConfig, AudioTrack, VideoFrame, VideoFrameMetadata, VideoSink, VideoTrack,
+            AudioDecoderConfig, AudioEncoderConfig, AudioTrack, VideoFrame, VideoFrameMetadata,
+            VideoSink, VideoTrack, configure_dred_from_assets,
         },
         peer_connection::{AudioLevel, PeerConnection, Protocol, ReceivedAudioLevel, SendRates},
         peer_connection_factory::{self as pcf, AudioJitterBufferConfig, PeerConnectionFactory},
@@ -2927,12 +2928,24 @@ impl Client {
     // Currently, this occurs via on_sfu_client_joined (Joining -> Joined) or
     // or via peek_result_inner (Joining -> Pending -> Joined)
     fn on_client_joined(state: &mut State) {
+        let mut encoder_config = AudioEncoderConfig {
+            dred_duration: state.dred_duration,
+            ..AudioEncoderConfig::default()
+        };
+        let mut decoder_config = AudioDecoderConfig::default();
+
+        configure_dred_from_assets(
+            &state.asset_registry,
+            &mut encoder_config,
+            &mut decoder_config,
+        );
+
         state
             .peer_connection
-            .configure_audio_encoders(&AudioEncoderConfig {
-                dred_duration: state.dred_duration,
-                ..AudioEncoderConfig::default()
-            });
+            .configure_audio_encoders(&encoder_config);
+        state
+            .peer_connection
+            .configure_audio_decoders(&decoder_config);
     }
 
     pub fn on_signaling_message_received(

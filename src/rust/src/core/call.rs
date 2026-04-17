@@ -37,7 +37,9 @@ use crate::{
     },
     error::RingRtcError,
     webrtc::{
-        ice_gatherer::IceGatherer, media::MediaStream, peer_connection::AudioLevel,
+        ice_gatherer::IceGatherer,
+        media::{MediaStream, configure_dred_from_assets},
+        peer_connection::AudioLevel,
         peer_connection_observer::NetworkRoute,
     },
 };
@@ -583,47 +585,11 @@ where
 
         let mut call_manager = self.call_manager()?;
 
-        // Change the call configuration based on available assets. Don't use this
-        // if building for the call_sim feature.
-        if cfg!(not(feature = "call_sim")) && call_config.audio_encoder_config.dred_duration > 0 {
-            // See if model assets are available for Opus DRED (including Deep PLC).
-            info!("assets: Checking for opus-dred assets in the registry...");
-            if let Some(versions) = self.asset_registry.get_options_for("opus-dred") {
-                info!(
-                    "assets: There are {} opus-dred asset versions available",
-                    versions.len()
-                );
-                if let Some(version) = versions.first() {
-                    if let Some(asset) = self.asset_registry.get_asset("opus-dred", *version) {
-                        info!("assets: opus-dred asset version {version} found");
-
-                        // Set the weights on both the encoder and decoder.
-                        // Lifetime: Each clone of the Arc<asset_content> will be held by
-                        // a connection or group call object which lives as long as the
-                        // PeerConnection in WebRTC.
-                        call_config.audio_encoder_config.dnn_weights =
-                            Some(Arc::clone(&asset.content));
-                        call_config.audio_decoder_config.dnn_weights = Some(asset.content);
-
-                        // Set up Opus for the optimal DRED configuration.
-                        // Disable FEC and make sure that Opus Deep PLC is always used.
-                        call_config.audio_encoder_config.enable_fec = false;
-                        call_config.audio_decoder_config.complexity = Some(5);
-                    } else {
-                        warn!("assets: Failed to get opus-dred asset version {version}!");
-                    }
-                } else {
-                    warn!("assets: No versions found for opus-dred!");
-                }
-            } else {
-                warn!("assets: No opus-dred assets found!");
-            }
-
-            if call_config.audio_encoder_config.dnn_weights.is_none() {
-                warn!("assets: Disabling DRED since no dnn weights were found!");
-                call_config.audio_encoder_config.dred_duration = 0;
-            }
-        }
+        configure_dred_from_assets(
+            &self.asset_registry,
+            &mut call_config.audio_encoder_config,
+            &mut call_config.audio_decoder_config,
+        );
 
         match self.direction {
             // This happens after received_offer and an offer is put in self.pending_call.

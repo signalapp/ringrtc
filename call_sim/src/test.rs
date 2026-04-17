@@ -169,6 +169,7 @@ pub struct MediaFileIo {
 }
 
 impl Test {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         root_path: &PathBuf,
         output_dir: &str,
