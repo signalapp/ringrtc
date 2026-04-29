@@ -154,12 +154,28 @@ impl Worker {
                 if let Some(ado) = &self.audio_device_observer {
                     ado.input_changed(names.clone());
                 }
+                if let Some(id) = self.recording_device
+                    && !collection.iter().any(|device| device.devid == id)
+                {
+                    warn!(
+                        "Selected recording device no longer available; falling back to default until client corrects",
+                    );
+                    self.recording_device = None;
+                }
                 self.input_device_cache = collection;
                 *self.input_device_names.lock().unwrap() = names;
             }
             DeviceType::OUTPUT => {
                 if let Some(ado) = &self.audio_device_observer {
                     ado.output_changed(names.clone());
+                }
+                if let Some(id) = self.playout_device
+                    && !collection.iter().any(|device| device.devid == id)
+                {
+                    warn!(
+                        "Selected playout device no longer available; falling back to default until client corrects",
+                    );
+                    self.playout_device = None;
                 }
                 self.output_device_cache = collection;
                 *self.output_device_names.lock().unwrap() = names;
