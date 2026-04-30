@@ -260,17 +260,22 @@ pub mod manifest {
 
 #[cfg(not(feature = "sim"))]
 pub mod manifest {
-    use hex_literal::hex;
-
     use crate::protobuf::assets::AssetMetadata;
 
+    #[cfg(not(target_pointer_width = "32"))]
     pub fn supported_assets() -> Vec<AssetMetadata> {
+        use hex_literal::hex;
         vec![AssetMetadata {
             asset_group: "opus-dred".to_string(),
             version: "0.0.1".to_string(),
             size_bytes: 1998208,
             sha512_hash: hex!("b1d7e975bfeedf08937c1af6b34831d4b257ea38a2e2daaec9ac7f5014e14c6593117c8e0922a3626615fbdb4a41970ef90d41d517a81925b755bbf378c18a69").to_vec(),
         }]
+    }
+
+    #[cfg(target_pointer_width = "32")]
+    pub fn supported_assets() -> Vec<AssetMetadata> {
+        vec![]
     }
 }
 
