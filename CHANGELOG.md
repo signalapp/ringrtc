@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.68.1
+
+- Integrate Opus DRED
+  - Add more audio receiver stats for jitter buffer
+  - Add opus decoder configuration plumbing
+  - Add fields for dred support to the opus encoder configuration
+  - Add opus dnn weights support and asset registry integration
+  - Enable rtc_opus_support_dred in build scripts
+  - Update to webrtc 7680f
+
+- Speculative fix to device disconnection race
+
+- Simplify ADM device switching APIs
+
+- Asset Registry: Disable DRED support for 32-bit devices
+
 ## v2.68.0
 
 - Add Android screenshare support
