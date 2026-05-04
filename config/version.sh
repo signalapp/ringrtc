@@ -20,7 +20,8 @@ property() {
 
 # Specify WebRTC version.  This corresponds to the
 # branch or tag of the signalapp/webrtc repository.
-WEBRTC_VERSION=$(property 'webrtc.version')
+WEBRTC_VERSION="$(property 'webrtc.version')"
+export WEBRTC_VERSION
 
 RINGRTC_MAJOR_VERSION=$(property 'ringrtc.version.major')
 RINGRTC_MINOR_VERSION=$(property 'ringrtc.version.minor')

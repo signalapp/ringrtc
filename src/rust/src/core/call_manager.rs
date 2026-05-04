@@ -512,6 +512,11 @@ where
             option_env!("CARGO_PKG_VERSION").unwrap_or("unknown")
         );
 
+        info!(
+            "WebRTC v{}",
+            option_env!("WEBRTC_VERSION").unwrap_or("unknown")
+        );
+
         let worker_stopper = Stopper::new();
 
         Ok(Self {
