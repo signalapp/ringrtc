@@ -528,6 +528,16 @@ impl PeerConnectionFactory {
         )
     }
 
+    #[cfg(all(not(feature = "sim"), feature = "native"))]
+    pub fn set_input_voice_processing_enabled(&mut self, enabled: bool) -> Result<()> {
+        self.adm
+            .as_ref()
+            .and_then(|adm| adm.lock().ok())
+            .map_or(Err(anyhow!("couldn't access ADM")), |mut adm| {
+                adm.set_input_processing_enabled(enabled)
+            })
+    }
+
     #[cfg(feature = "native")]
     pub fn get_audio_recording_devices(&mut self) -> Result<Vec<AudioDevice>> {
         let devices = self

@@ -162,6 +162,8 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).getAudioOutputs =
   Native.cm_getAudioOutputs;
 (NativeCallManager.prototype as any).setAudioOutput = Native.cm_setAudioOutput;
+(NativeCallManager.prototype as any).setVoiceProcessingEnabled =
+  Native.cm_setVoiceProcessingEnabled;
 (NativeCallManager.prototype as any).processEvents = Native.cm_processEvents;
 (NativeCallManager.prototype as any).setRtcStatsInterval =
   Native.cm_setRtcStatsInterval;
@@ -1955,6 +1957,20 @@ export class RingRTCType {
   setAudioOutput(index: number): void {
     this.callManager.setAudioOutput(index);
   }
+
+  /**
+   *  Enables or disables different voice processing techniques including:
+   * - Acoustic Echo Cancellation (AEC)
+   * - Noise Supression (NS)
+   * - Automatic Gain Control (AGC)
+   *
+   * This request is idempotent
+   *
+   * @param enabled - whether to enable voice processing
+   */
+  setVoiceProcessingEnabled(enabled: boolean): void {
+    this.callManager.setVoiceProcessingEnabled(enabled);
+  }
 }
 
 export interface CallSettings {
@@ -3176,6 +3192,7 @@ export interface CallManager {
   setAudioInput(index: number): void;
   getAudioOutputs(): Array<AudioDevice>;
   setAudioOutput(index: number): void;
+  setVoiceProcessingEnabled(enabled: boolean): void;
 }
 
 export interface CallManagerCallbacks {

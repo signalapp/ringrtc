@@ -2310,6 +2310,23 @@ fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
 }
 
 #[allow(non_snake_case)]
+fn setVoiceProcessingEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
+    info!("setVoiceProcessingEnabled(): {:?}", enabled);
+
+    match with_call_endpoint(&mut cx, |endpoint| {
+        endpoint
+            .peer_connection_factory
+            .set_input_voice_processing_enabled(enabled)
+    }) {
+        Ok(_) => (),
+        Err(err) => error!("setVoiceProcessingEnabled failed: {}", err),
+    };
+
+    Ok(cx.undefined().upcast())
+}
+
+#[allow(non_snake_case)]
 fn setRtcStatsInterval(mut cx: FunctionContext) -> JsResult<JsValue> {
     let client_id = cx.argument::<JsNumber>(0)?.value(&mut cx) as group_call::ClientId;
     let interval = Duration::from_millis(cx.argument::<JsNumber>(1)?.value(&mut cx) as u64);
@@ -3235,6 +3252,7 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_setAudioInput", setAudioInput)?;
     cx.export_function("cm_getAudioOutputs", getAudioOutputs)?;
     cx.export_function("cm_setAudioOutput", setAudioOutput)?;
+    cx.export_function("cm_setVoiceProcessingEnabled", setVoiceProcessingEnabled)?;
     cx.export_function("cm_setRtcStatsInterval", setRtcStatsInterval)?;
     cx.export_function("cm_processEvents", processEvents)?;
     Ok(())

@@ -19,7 +19,7 @@ use std::{
 
 use anyhow::{Context as AnyhowContext, anyhow, bail};
 use cubeb::{Context, DeviceId, DeviceType, MonoFrame, StereoFrame, Stream, StreamPrefs};
-use cubeb_core::{LogLevel, log_enabled, set_logging};
+use cubeb_core::{InputProcessingParams, LogLevel, log_enabled, set_logging};
 use lazy_static::lazy_static;
 use regex::Regex;
 #[cfg(target_os = "windows")]
@@ -83,6 +83,7 @@ enum Event {
     InitRecording,
     StartRecording,
     WarmupRecording,
+    SetInputProcessing(bool),
     StopRecording,
     PlayoutDelay,
     Terminate,
@@ -107,6 +108,7 @@ struct Worker {
     // Note that the streams must not outlive the ctx.
     output_stream: Option<Stream<OutFrame>>,
     input_stream: Option<Stream<Frame>>,
+    voice_processing_enabled: bool,
     // Note that the caches must not outlive the ctx.
     input_device_cache: DeviceCollectionWrapper,
     output_device_cache: DeviceCollectionWrapper,
@@ -440,9 +442,7 @@ impl Worker {
             .rate(SAMPLE_FREQUENCY)
             .channels(NUM_CHANNELS)
             .layout(cubeb::ChannelLayout::MONO);
-        // On Mac, the AEC pipeline runs at 24kHz (FB15839727 tracks this). For now,
-        // disable it.
-        let params = if cfg!(not(target_os = "macos")) {
+        let params = if cfg!(not(target_os = "macos")) || self.voice_processing_enabled {
             builder.prefs(StreamPrefs::VOICE)
         } else {
             builder
@@ -513,6 +513,41 @@ impl Worker {
             });
         match builder.init(&self.ctx) {
             Ok(stream) => {
+                if cfg!(target_os = "macos") && self.voice_processing_enabled {
+                    // Note: On Mac, the AEC pipeline runs at 24kHz (FB15839727 tracks this).
+                    // This results in a slightly thin sound because of the Nyquist theorem.
+                    // See https://en.wikipedia.org/wiki/Nyquist_frequency
+                    match self.ctx.supported_input_processing_params() {
+                        Ok(params) => {
+                            // With cubeb-coreaudio-rs, the VPIO input is inaudible without these settings.
+                            // See https://github.com/mozilla/cubeb-coreaudio-rs/issues/239#issuecomment-2430361990
+                            info!("Available input processing params: {:?}", params);
+                            let mut desired_params = InputProcessingParams::empty();
+                            if params.contains(InputProcessingParams::AUTOMATIC_GAIN_CONTROL)
+                                && self.voice_processing_enabled
+                            {
+                                desired_params |= InputProcessingParams::AUTOMATIC_GAIN_CONTROL;
+                            }
+                            // With the coreaudio-rust backend, these settings must be set together.
+                            if params.contains(
+                                InputProcessingParams::ECHO_CANCELLATION
+                                    | InputProcessingParams::NOISE_SUPPRESSION,
+                            ) && self.voice_processing_enabled
+                            {
+                                desired_params |= InputProcessingParams::ECHO_CANCELLATION
+                                    | InputProcessingParams::NOISE_SUPPRESSION;
+                            }
+                            if let Err(e) = stream.set_input_processing_params(desired_params) {
+                                error!("couldn't set input params: {:?}", e);
+                            }
+                        }
+                        Err(e) => warn!(
+                            "Failed to get supported input processing parameters; proceeding without: {}",
+                            e
+                        ),
+                    }
+                }
+
                 self.input_stream = Some(stream);
                 Ok(())
             }
@@ -572,6 +607,18 @@ impl Worker {
             self.start_recording(was_sending_webrtc)?;
         }
         Ok(())
+    }
+
+    fn set_input_processing_enabled(&mut self, enabled: bool) -> anyhow::Result<()> {
+        if enabled == self.voice_processing_enabled {
+            return Ok(());
+        }
+        self.voice_processing_enabled = enabled;
+        if let Some(device) = self.recording_device {
+            self.update_recording_device(device)
+        } else {
+            Ok(())
+        }
     }
 
     // Get the playout delay, in ms.
@@ -654,6 +701,9 @@ impl Worker {
                 Event::InitRecording => self.init_recording(),
                 Event::StartRecording => self.start_recording(true),
                 Event::WarmupRecording => self.start_recording(false),
+                Event::SetInputProcessing(voice_processing_enabled) => {
+                    self.set_input_processing_enabled(voice_processing_enabled)
+                }
                 Event::StopRecording => self.stop_recording(),
                 Event::PlayoutDelay => {
                     if let Err(e) = playout_delay_sender.send(self.playout_delay()) {
@@ -808,6 +858,7 @@ impl Worker {
                 recording_device: None,
                 output_stream: None,
                 input_stream: None,
+                voice_processing_enabled: false,
                 input_device_cache: Default::default(),
                 output_device_cache: Default::default(),
                 input_device_names,
@@ -1646,6 +1697,13 @@ impl AudioDeviceModule {
             self.has_recording_device = true;
         }
         out
+    }
+
+    pub fn set_input_processing_enabled(&mut self, enabled: bool) -> anyhow::Result<()> {
+        if let Err(e) = self.mpsc_sender.send(Event::SetInputProcessing(enabled)) {
+            return Err(anyhow!("Failed to request SetInputProcessing: {}", e));
+        }
+        Ok(())
     }
 }
 
