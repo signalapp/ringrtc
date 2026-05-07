@@ -341,6 +341,9 @@ impl Worker {
                     } else if play_data.data.len() > WEBRTC_WINDOW {
                         error!("need_more_play_data returned too much data");
                         return -1;
+                    } else if play_data.data.is_empty() {
+                        warn!("need_more_play_data returned no data; short-circuiting");
+                        break;
                     }
                     // Put data into the right format and add it to the output
                     // array for cubeb to play.
