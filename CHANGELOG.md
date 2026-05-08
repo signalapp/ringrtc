@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.69.0
+
+- Enable libvpx VP9 for android and expose flag
+
+- ADM: Prevent infinite loop in desktop adm playout callback
+
+- ADM: Add support for toggling AGC/AEC/NS on desktop (macOS)
+
+- Update to webrtc 7680g
+  - Return nonzero length for ADM callback-gone case
+
+- Log webrtc version from version.properties
+
 ## v2.68.1
 
 - Integrate Opus DRED
