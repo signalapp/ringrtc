@@ -96,6 +96,7 @@ pub fn common_webrtc_flags() -> Vec<String> {
         "rtc_enable_sctp=false".to_string(),
         "rtc_disable_metrics=true".to_string(),
         "rtc_disable_trace_events=true".to_string(),
+        "rtc_libvpx_build_vp9=true".to_string(),
     ]
 }
 
@@ -109,7 +110,6 @@ pub fn build_webrtc_for_desktop(sh: Shell) -> anyhow::Result<()> {
     args.extend(vec![
         format!("target_cpu=\"{gnu_arch}\""),
         "rtc_use_x11=false".to_string(),
-        "rtc_libvpx_build_vp9=true".to_string(),
         "use_siso=true".to_string(),
     ]);
     if TARGET_OS.as_str() == "linux" && gnu_arch == "arm64" {
@@ -156,10 +156,7 @@ pub fn build_webrtc_for_ios(sh: Shell) -> anyhow::Result<()> {
     const IPHONEOS_DEPLOYMENT_TARGET: &str = "14.0";
     let profile = PROFILE.as_str();
     let mut args = common_webrtc_flags();
-    args.extend(vec![
-        format!("enable_dsyms={}", !*IS_RELEASE),
-        "rtc_libvpx_build_vp9=false".to_string(),
-    ]);
+    args.extend(vec![format!("enable_dsyms={}", !*IS_RELEASE)]);
     let working_dir = format!("{}/src", *LIBWEBRTC_DIR);
     let dest = format!("{}/out/ios/{}", working_dir, *PROFILE);
     let library_dest = WEBRTC_DEST_DIR.as_str();
@@ -219,7 +216,6 @@ pub fn build_webrtc_for_android(sh: Shell) -> anyhow::Result<()> {
     let mut args = common_webrtc_flags();
     args.extend(vec![
         format!("target_cpu={gnu_arch}"),
-        "rtc_libvpx_build_vp9=false".to_string(),
         "android_static_analysis=\"off\"".to_string(),
         "use_siso=true".to_string(),
     ]);

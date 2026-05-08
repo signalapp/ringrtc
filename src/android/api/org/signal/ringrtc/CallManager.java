@@ -417,6 +417,7 @@ public class CallManager {
    * @param dataMode               desired data mode to start the session with
    * @param audioLevelsIntervalMs  if greater than 0, enable audio levels with this interval (in milliseconds)
    * @param dredDuration           if provided, client will encode DRED PLC for the period specified
+   * @param enableVp9              if true, allow use of software VP9 video codec for this call
    * @param enableCamera           if true, enable the local camera video track when created
    *
    * @throws CallException for native code failures
@@ -434,6 +435,7 @@ public class CallManager {
                                 DataMode                       dataMode,
                       @Nullable Integer                        audioLevelsIntervalMs,
                       @Nullable Byte                           dredDuration,
+                                boolean                        enableVp9,
                                 boolean                        enableCamera)
     throws CallException
   {
@@ -466,7 +468,8 @@ public class CallManager {
                    callContext,
                    dataMode.ordinal(),
                    audioLevelsIntervalMillis,
-                   dredDurationByte);
+                   dredDurationByte,
+                   Util.deviceSupportsVp9HardwareEncoder(eglBase) || enableVp9);
   }
 
   /**
@@ -2566,7 +2569,8 @@ public class CallManager {
                         CallContext callContext,
                         int         dataMode,
                         int         audioLevelsIntervalMillis,
-                        byte        dredDuration)
+                        byte        dredDuration,
+                        boolean     enableVp9)
     throws CallException;
 
   private native

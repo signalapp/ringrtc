@@ -6,11 +6,16 @@ package org.signal.ringrtc;
 
 import androidx.annotation.NonNull;
 
+import org.webrtc.EglBase;
+import org.webrtc.HardwareVideoEncoderFactory;
+
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.UUID;
 
 public final class Util {
+    private static final String  TAG = "RingRtcUtil";
+
     // Based on https://gist.github.com/jeffjohnson9046/c663dd22bbe6bb0b3f5e.
     public static byte[] getBytesFromUuid(UUID uuid) {
         ByteBuffer bytes = ByteBuffer.wrap(new byte[16]);
@@ -50,5 +55,27 @@ public final class Util {
             // Return an empty array.
             return new byte[0];
         }
+    }
+
+    public static boolean deviceSupportsVp9HardwareEncoder(EglBase eglBase) {
+      if (eglBase == null) {
+        return false;
+      }
+
+      HardwareVideoEncoderFactory hwFactory = new HardwareVideoEncoderFactory(eglBase.getEglBaseContext(), true, true, (mediaCodecInfo) -> {
+        for (String mimeType : mediaCodecInfo.getSupportedTypes()) {
+          if (mimeType.equals("video/x-vnd.on2.vp9")) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      if (hwFactory.getSupportedCodecs().length == 0) {
+        Log.w(TAG, "No supported VP9 hardware encoder found");
+        return false;
+      }
+
+      return true;
     }
 }
