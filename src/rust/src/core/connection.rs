@@ -968,6 +968,24 @@ where
 
     /// Update the current network route.
     pub fn set_network_route(&self, network_route: NetworkRoute) -> Result<()> {
+        if let Ok(mut webrtc) = self
+            .webrtc
+            .lock()
+            .inspect_err(|e| error!("couldn't get webrtc lock: {}", e))
+            && let Ok(old_network_route) = self.network_route()
+            && (old_network_route.local_relayed != network_route.local_relayed
+                || old_network_route.remote_relayed != network_route.remote_relayed
+                || old_network_route.local_relay_protocol != network_route.local_relay_protocol)
+        {
+            if let Some(observer) = webrtc.stats_observer.as_mut() {
+                observer.set_network_route(network_route);
+            }
+            if let Some(observer) = webrtc.stats_observer.as_ref()
+                && let Ok(peer_connection) = webrtc.peer_connection()
+            {
+                let _ = peer_connection.get_stats(observer);
+            }
+        }
         self.update_bandwidth_controller(move |bandwidth_controller| {
             if bandwidth_controller.network_route == network_route {
                 // Nothing changed

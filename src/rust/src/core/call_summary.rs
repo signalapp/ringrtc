@@ -8,7 +8,7 @@ use std::{
     fmt::Debug,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
     sync::{Arc, MutexGuard},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::anyhow;
@@ -397,6 +397,12 @@ impl StatsSets {
         self.stats_sets[last].rtt_stun.push(rtt);
     }
 
+    fn set_relayed(&mut self, relayed: bool) {
+        if let Some(last) = self.stats_sets.back_mut() {
+            last.relayed = Some(relayed);
+        }
+    }
+
     fn to_proto(&self) -> Vec<protobuf::call_summary::StatsSet> {
         Vec::from(self.stats_sets.clone())
     }
@@ -697,6 +703,11 @@ impl CallInfo {
                     .add(snapshot.current_round_trip_time);
                 self.stats_sets
                     .push_stun_rtt(snapshot.current_round_trip_time as f32);
+                self.stats_sets.set_relayed(
+                    snapshot
+                        .network_route
+                        .is_some_and(|network| network.local_relayed || network.remote_relayed),
+                )
             }
             StatsSnapshot::AudioSender(snapshot) => {
                 self.quality_stats_sketches
@@ -902,6 +913,12 @@ impl StatsSnapshotConsumer for DirectCallStatsSnapshotConsumer {
     }
 }
 
+// Normally, report a call as "relayed" if at least 1 / MIN_RELAYED_FRACTION of it is on a relay.
+// However, if a call is less than MIN_CALL_TIME_IGNORE_RELAY_FRACTION and relay was used at all,
+// report the call as relayed.
+const MIN_RELAYED_FRACTION: u128 = 8;
+const MIN_CALL_TIME_IGNORE_RELAY_FRACTION: Duration = Duration::from_secs(30);
+
 #[derive(Debug, Default)]
 struct DirectCallSummaryInner {
     call_info: CallInfo,
@@ -916,6 +933,8 @@ struct DirectCallSummaryInner {
     answer_received_time: Option<Timestamp>,
     /// The time when the first connection object achieves an ICE connection.
     ice_connected_time: Option<Timestamp>,
+    relayed_time_this_call: Duration,
+    last_relay_start_time: Option<Instant>,
 }
 
 impl DirectCallSummaryInner {
@@ -946,6 +965,12 @@ impl DirectCallSummaryInner {
             Timestamp(0)
         });
 
+        let call_length_ms: u128 =
+            (Into::<u64>::into(end_time) - Into::<u64>::into(start_time)).into();
+        let relayed_time_ms = self.relayed_time_this_call.as_millis();
+        let relayed = (relayed_time_ms > call_length_ms / MIN_RELAYED_FRACTION)
+            || (relayed_time_ms > 0
+                && call_length_ms <= MIN_CALL_TIME_IGNORE_RELAY_FRACTION.as_millis());
         let mut telemetry = CallTelemetry {
             version: CALL_TELEMETRY_VERSION,
             start_time: start_time.into(),
@@ -956,7 +981,7 @@ impl DirectCallSummaryInner {
                 stream_summaries: Some(self.call_info.stream_summaries.to_proto()),
                 ice_candidate_switch_count: Some(self.ice_candidate_switch_count),
                 ice_reconnect_count: Some(self.ice_reconnect_count),
-                relayed: Some(self.relayed),
+                relayed: Some(relayed),
                 offer_sent_time: self.offer_sent_time.map(Into::into),
                 answer_sent_time: self.answer_sent_time.map(Into::into),
                 answer_received_time: self.answer_received_time.map(Into::into),
@@ -1007,9 +1032,24 @@ impl DirectCallSummaryInner {
             ConnectionObserverEvent::IceNetworkRouteChanged(route) => {
                 self.call_info.on_event(Event::IceNetworkRouteChanged);
                 self.ice_candidate_switch_count += 1;
-                if !self.relayed && (route.local_relayed || route.remote_relayed) {
-                    self.relayed = true;
+                let now = Instant::now();
+
+                let relayed_now = route.local_relayed || route.remote_relayed;
+                if !relayed_now && self.relayed {
+                    // Switching off relay; add time elapsed
+                    if let Some(last) = self.last_relay_start_time {
+                        self.relayed_time_this_call += now.duration_since(last);
+                    } else {
+                        error!("Expected to have a last_relay_start_time but was None");
+                    }
                 }
+                // Update the start time if we're newly switching to relay OR we are on relay
+                // and haven't set it before (e.g., we started the call on relay).
+                if relayed_now && (!self.relayed || self.last_relay_start_time.is_none()) {
+                    self.last_relay_start_time = Some(now);
+                }
+
+                self.relayed = relayed_now;
                 if !self.call_info.cellular && route.local_adapter_type.is_cellular() {
                     self.call_info.cellular = true;
                 }

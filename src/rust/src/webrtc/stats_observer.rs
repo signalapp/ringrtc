@@ -25,7 +25,11 @@ pub use crate::webrtc::ffi::stats_observer::RffiStatsObserver;
 use crate::webrtc::sim::stats_observer as stats;
 #[cfg(feature = "sim")]
 pub use crate::webrtc::sim::stats_observer::RffiStatsObserver;
-use crate::{common::CallId, webrtc};
+use crate::{
+    common::CallId,
+    webrtc,
+    webrtc::peer_connection_observer::{NetworkRoute, TransportProtocol},
+};
 
 /// How often to clean up old stats.
 const CLEAN_UP_STATS_TICKS: u32 = 60;
@@ -715,6 +719,7 @@ pub struct ConnectionStatsSnapshot {
     pub responses_received: u64,
     pub requests_received: u64,
     pub responses_sent: u64,
+    pub network_route: Option<NetworkRoute>,
 }
 
 impl ConnectionStatsSnapshot {
@@ -728,9 +733,17 @@ impl ConnectionStatsSnapshot {
         requests_sent,\
         responses_received,\
         requests_received,\
-        responses_sent";
+        responses_sent,\
+        local_relay,\
+        local_protocol,\
+        remote_relay";
 
-    fn derive(call_id: CallId, timestamp_us: i64, stats: &ConnectionStatistics) -> Self {
+    fn derive(
+        call_id: CallId,
+        timestamp_us: i64,
+        stats: &ConnectionStatistics,
+        network_route: Option<NetworkRoute>,
+    ) -> Self {
         Self {
             call_id,
             timestamp_us,
@@ -740,6 +753,7 @@ impl ConnectionStatsSnapshot {
             responses_received: stats.responses_received,
             requests_received: stats.requests_received,
             responses_sent: stats.responses_sent,
+            network_route,
         }
     }
 }
@@ -755,7 +769,28 @@ impl Display for ConnectionStatsSnapshot {
             responses_received,
             requests_received,
             responses_sent,
+            network_route,
         } = self;
+        let local_relay = network_route.map(|route| {
+            if route.local_relayed {
+                "relay"
+            } else {
+                "direct"
+            }
+        });
+        let local_protocol = network_route.map(|route| match route.local_relay_protocol {
+            TransportProtocol::Udp => "Udp",
+            TransportProtocol::Tcp => "Tcp",
+            TransportProtocol::Tls => "Tls",
+            TransportProtocol::Unknown => "Unknown",
+        });
+        let remote_relay = network_route.map(|route| {
+            if route.remote_relayed {
+                "relay"
+            } else {
+                "direct"
+            }
+        });
         write!(
             f,
             "{},\
@@ -766,7 +801,10 @@ impl Display for ConnectionStatsSnapshot {
             {requests_sent},\
             {responses_received},\
             {requests_received},\
-            {responses_sent}",
+            {responses_sent},\
+            {local_relay:?},\
+            {local_protocol:?},\
+            {remote_relay:?}",
             Self::LOG_MARKER
         )
     }
@@ -831,6 +869,8 @@ pub struct StatsObserver {
     stats_snapshot_consumer: Box<dyn StatsSnapshotConsumer>,
     #[cfg(not(target_os = "android"))]
     system_stats: sysinfo::System,
+    to_report_network_route: Option<NetworkRoute>,
+    next_network_route: Option<NetworkRoute>,
 }
 
 impl StatsObserver {
@@ -867,7 +907,13 @@ impl StatsObserver {
             stats_snapshot_consumer,
             #[cfg(not(target_os = "android"))]
             system_stats,
+            to_report_network_route: None,
+            next_network_route: None,
         }
+    }
+
+    pub fn set_network_route(&mut self, route: NetworkRoute) {
+        self.next_network_route = Some(route);
     }
 
     /// Invoked when statistics are received via the stats observer callback.
@@ -899,11 +945,18 @@ impl StatsObserver {
 
         // Connection
 
+        if self.to_report_network_route.is_none() {
+            self.to_report_network_route = self.next_network_route;
+        }
+
         let connection_stats_snapshot = ConnectionStatsSnapshot::derive(
             self.call_id,
             media_statistics.timestamp_us,
             &media_statistics.nominated_connection_statistics,
+            self.to_report_network_route,
         );
+        self.to_report_network_route = self.next_network_route;
+
         info!("{connection_stats_snapshot}");
         self.stats_snapshot_consumer
             .on_stats_snapshot_ready(&connection_stats_snapshot.into());
