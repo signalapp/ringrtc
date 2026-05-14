@@ -58,6 +58,10 @@ export class QualityStats {
  */
 export class CallSummary {
   /**
+   * SHA-256 Hash of a CallId
+   */
+  readonly callIdHash: Uint8Array<ArrayBuffer> | undefined;
+  /**
    * Call start timestamp in milliseconds since January 1, 1970 00:00:00 UTC.
    */
   readonly startTime!: number;

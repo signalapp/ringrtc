@@ -37,6 +37,7 @@ use crate::{
 
 #[derive(Debug, Default)]
 pub struct CallSummary {
+    pub call_id_hash: Option<Vec<u8>>,
     pub start_time: Timestamp,
     pub end_time: Timestamp,
     pub quality_stats: QualityStats,
@@ -876,9 +877,13 @@ impl DirectCallSummary {
         }
     }
 
-    pub fn build_call_summary(&self, reason: CallEndReason) -> CallSummary {
+    pub fn build_call_summary(
+        &self,
+        call_id_hash: Option<Vec<u8>>,
+        reason: CallEndReason,
+    ) -> CallSummary {
         match self.lock() {
-            Ok(guard) => guard.build_call_summary(reason),
+            Ok(guard) => guard.build_call_summary(call_id_hash, reason),
             Err(error) => {
                 error!("Failed to build call summary: {:?}", error);
                 CallSummary::default()
@@ -944,7 +949,11 @@ impl DirectCallSummaryInner {
             .update_limits(time_limit, stats_period)
     }
 
-    fn build_call_summary(&self, reason: CallEndReason) -> CallSummary {
+    fn build_call_summary(
+        &self,
+        call_id_hash: Option<Vec<u8>>,
+        reason: CallEndReason,
+    ) -> CallSummary {
         let connect_time = self
             .call_info
             .connect_time
@@ -1011,6 +1020,7 @@ impl DirectCallSummaryInner {
             && reason != CallEndReason::RemoteReCall;
 
         CallSummary {
+            call_id_hash,
             start_time,
             end_time,
             quality_stats,
@@ -1285,6 +1295,7 @@ impl GroupCallSummaryInner {
             && self.remote_device_count_max > 0;
 
         CallSummary {
+            call_id_hash: None,
             start_time,
             end_time,
             quality_stats,

@@ -744,6 +744,10 @@ fn to_js_call_summary<'a>(
 ) -> JsResult<'a, JsObject> {
     let summary_object = cx.empty_object();
 
+    if let Some(call_id_hash) = summary.call_id_hash.as_ref() {
+        let call_id_hash = JsUint8Array::from_slice(cx, call_id_hash)?;
+        summary_object.set(cx, "callIdHash", call_id_hash)?;
+    }
     let start_time = cx.number(summary.start_time);
     summary_object.set(cx, "startTime", start_time)?;
     let end_time = cx.number(summary.end_time);

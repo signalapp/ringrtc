@@ -2236,6 +2236,11 @@ impl AndroidPlatform {
             }
         };
 
+        let call_id_hash = if let Some(id) = call_summary.call_id_hash.as_ref() {
+            env.byte_array_from_slice(id)?.into()
+        } else {
+            JObject::null()
+        };
         let quality_stats_object =
             self.make_quality_stats_object(env, &call_summary.quality_stats)?;
         let start_time = u64::from(call_summary.start_time) as jlong;
@@ -2256,6 +2261,7 @@ impl AndroidPlatform {
         let is_survey_candidate = call_summary.is_survey_candidate;
 
         let args = jni_args!((
+           call_id_hash => [byte],
            start_time => long,
            end_time => long,
            quality_stats_object => org.signal.ringrtc.CallSummary::QualityStats,

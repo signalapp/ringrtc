@@ -38,6 +38,8 @@ public struct MediaQualityStats {
 ///
 /// Statistics are captured when the call ends and are available for reporting.
 public struct CallSummary {
+    /// Call ID SHA-256 hash, or nil if unavailable
+    public let callIdHash: Data?
     /// Call start timestamp in milliseconds since January 1, 1970 00:00:00 UTC.
     public let startTime: UInt64
     /// Call end timestamp in milliseconds since January 1, 1970 00:00:00 UTC.
@@ -78,6 +80,10 @@ public struct CallSummary {
             )
         )
 
+        let callIdHash = summary.call_id_hash.map { call_id_hash in
+            Data(bytes: call_id_hash, count: Int(summary.call_id_hash_len))
+        }
+
         let rawStats = summary.raw_stats.map { raw_stats in
             Data(bytes: raw_stats, count: Int(summary.raw_stats_len))
         }
@@ -89,6 +95,7 @@ public struct CallSummary {
         let callEndReasonText = String(cString: summary.raw_call_end_reason_text)
 
         return Self(
+            callIdHash: callIdHash,
             startTime: summary.start_time,
             endTime: summary.end_time,
             qualityStats: qualityStats,

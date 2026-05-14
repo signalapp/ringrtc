@@ -154,6 +154,9 @@ public class CallSummary {
         }
     }
 
+    @Nullable
+    private final byte[]            callIdHash;
+
     private final long              startTime;
 
     private final long              endTime;
@@ -175,6 +178,7 @@ public class CallSummary {
     /**
      * Creates a call summary.
      *
+     * @param callIdHash bytes of a call ID hash
      * @param startTime call start timestamp in milliseconds since January 1, 1970
      *                  00:00:00 UTC
      * @param endTime call end timestamp in milliseconds since January 1, 1970
@@ -188,6 +192,7 @@ public class CallSummary {
      */
     @CalledByNative
     CallSummary(
+        @Nullable byte[]        callIdHash,
                   long          startTime,
                   long          endTime,
         @NonNull  QualityStats  qualityStats,
@@ -196,6 +201,7 @@ public class CallSummary {
         @NonNull  String        callEndReasonText,
                   boolean       isSurveyCandidate
     ) {
+        this.callIdHash = callIdHash;
         this.startTime = startTime;
         this.endTime = endTime;
         this.qualityStats = qualityStats;
@@ -203,6 +209,14 @@ public class CallSummary {
         this.rawStatsText = rawStatsText;
         this.callEndReasonText = callEndReasonText;
         this.isSurveyCandidate = isSurveyCandidate;
+    }
+
+    /**
+     * @return Call Id SHA-256 hash bytes
+     */
+    @Nullable
+    public byte[] getCallIdHash() {
+        return callIdHash;
     }
 
     /**

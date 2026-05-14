@@ -14,6 +14,7 @@ mod versioning;
 
 use std::fmt;
 
+use sha2::{Digest, Sha256};
 pub use versioning::SemanticVersion;
 
 use crate::webrtc::{
@@ -59,6 +60,13 @@ impl CallId {
 
     pub fn format(self, device_id: DeviceId) -> String {
         format!("0x{:x}-{}", self.id, device_id)
+    }
+
+    pub fn call_summary_hash(&self) -> Vec<u8> {
+        let mut hasher = Sha256::new();
+        hasher.update(b"CALL_SUMMARY_CALL_ID");
+        hasher.update(self.id.to_be_bytes());
+        hasher.finalize().to_vec()
     }
 }
 

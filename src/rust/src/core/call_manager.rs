@@ -1098,7 +1098,9 @@ where
 
         if let Some(reason) = reason {
             let remote_peer = call.remote_peer()?;
-            let summary = call.summary().build_call_summary(reason);
+            let summary = call
+                .summary()
+                .build_call_summary(Some(call_id.call_summary_hash()), reason);
             self.on_call_ended(&remote_peer, call_id, reason, summary)?;
         }
 

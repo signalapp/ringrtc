@@ -11,6 +11,8 @@ use crate::{core::call_summary::CallSummary, lite::ffi::ios::rtc_OptionalF32};
 #[derive(Debug, Default)]
 #[allow(non_camel_case_types)]
 pub struct rtc_callsummary_CallSummary {
+    pub call_id_hash: *const u8,
+    pub call_id_hash_len: usize,
     pub start_time: u64,
     pub end_time: u64,
     pub rtt_median_connection: rtc_OptionalF32,
@@ -47,6 +49,13 @@ impl rtc_callsummary_CallSummary {
             _ => (std::ptr::null(), 0),
         };
 
+        let (call_id_hash, call_id_hash_len) =
+            if let Some(call_id_hash) = summary.call_id_hash.as_ref() {
+                (call_id_hash.as_ptr(), call_id_hash.len())
+            } else {
+                (std::ptr::null(), 0)
+            };
+
         let raw_stats_text = summary
             .raw_stats_text
             .as_ref()
@@ -58,6 +67,8 @@ impl rtc_callsummary_CallSummary {
             .into_raw() as *const _;
 
         let mut wrapped_summary = Self {
+            call_id_hash,
+            call_id_hash_len,
             start_time: summary.start_time.into(),
             end_time: summary.end_time.into(),
             raw_call_end_reason_text,
