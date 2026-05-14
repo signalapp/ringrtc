@@ -216,6 +216,10 @@ struct StreamSummary {
     freeze_count: DistributionSummary<f32>,
     video_codec: StatsVideoCodecType,
     codec_implementation: Option<String>,
+    // The most recent audio receive stream redundancy statistics.
+    audio_samples_received: Option<u64>,
+    audio_samples_concealed: Option<u64>,
+    audio_redundant_packets: Option<u64>,
 }
 
 /// `StreamSummaries` is converted into `protobuf::call_summary::StreamSummaries`
@@ -546,6 +550,12 @@ impl From<(&u32, &StreamSummary)> for protobuf::call_summary::StreamSummary {
             },
             codec_implementation: summary.codec_implementation.clone(),
             ssrc: Some(*ssrc),
+            audio_concealment_pct: summary
+                .audio_samples_received
+                .zip(summary.audio_samples_concealed)
+                .filter(|(received, _)| *received > 0)
+                .map(|(received, concealed)| (concealed as f32 / received as f32) * 100.0),
+            audio_redundant_packets: summary.audio_redundant_packets,
         }
     }
 }
@@ -746,6 +756,12 @@ impl CallInfo {
                         summary.bitrate.push(snapshot.bitrate);
                         summary.packet_loss.push(snapshot.packets_lost_pct);
                         summary.jitter.push(snapshot.jitter as f32);
+                        *summary.audio_samples_received.get_or_insert(0) +=
+                            snapshot.total_samples_received;
+                        *summary.audio_samples_concealed.get_or_insert(0) +=
+                            snapshot.concealed_samples;
+                        *summary.audio_redundant_packets.get_or_insert(0) +=
+                            snapshot.fec_packets_received;
                     });
                 self.stats_sets
                     .push_audio_recv_stream_stats(snapshot.into());
@@ -1475,6 +1491,8 @@ mod test {
                 video_codec: None,
                 codec_implementation: None,
                 ssrc: Some(v),
+                audio_concealment_pct: None,
+                audio_redundant_packets: None,
             })
             .collect::<Vec<protobuf::call_summary::StreamSummary>>()
     }
