@@ -12,6 +12,7 @@ set -e
 
 # Tests that take < 2 minutes.
 SMALL_CORRECTNESS_TESTS="audio_decoder_unittests \
+  audio_engine_tests \
   common_audio_unittests \
   common_video_unittests \
   dcsctp_unittests \
@@ -21,6 +22,7 @@ SMALL_CORRECTNESS_TESTS="audio_decoder_unittests \
   neteq_pcmu_quality_test \
   rtc_media_unittests \
   rtc_pc_unittests \
+  rtc_p2p_unittests \
   rtc_stats_unittests \
   svc_tests \
   system_wrappers_unittests \
