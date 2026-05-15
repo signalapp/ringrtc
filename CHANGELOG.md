@@ -2,6 +2,20 @@
 
 ## v2.69.0
 
+- Add audio redundancy statistics to Call Summary
+
+- Add Call ID hash to Call Summary
+
+- Fix is relayed in Call Summary
+
+- Update to webrtc 7778b
+  - Merge m148 from upstream
+  - Always allow packet-type-based packet demuxing
+
+- Call Sim: Add DRED options to baseline
+
+## v2.69.0
+
 - Enable libvpx VP9 for android and expose flag
 
 - ADM: Prevent infinite loop in desktop adm playout callback
