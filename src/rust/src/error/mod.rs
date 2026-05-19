@@ -87,10 +87,6 @@ pub enum RingRtcError {
     // WebRTC / C++ offer / answer error codes
     #[error("Unable to convert offer or answer to SDP")]
     ToSdp,
-    #[error("Unable to convert sdp to answer")]
-    ConvertSdpAnswer,
-    #[error("Unable to convert sdp to offer")]
-    ConvertSdpOffer,
     #[error("Unable to munge SDP")]
     MungeSdp,
     #[error("Unknown signaled protocol version")]

@@ -86,22 +86,6 @@ pub unsafe fn Rust_toSdp(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_offerFromSdp(
-    _sdp: webrtc::ptr::Borrowed<c_char>,
-) -> webrtc::ptr::Owned<RffiSessionDescription> {
-    info!("Rust_offerFromSdp(): ");
-    unsafe { webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP_ANSWER)) }
-}
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
-pub unsafe fn Rust_answerFromSdp(
-    _sdp: webrtc::ptr::Borrowed<c_char>,
-) -> webrtc::ptr::Owned<RffiSessionDescription> {
-    info!("Rust_answerFromSdp(): ");
-    unsafe { webrtc::ptr::Owned::from_ptr(addr_of!(FAKE_SDP_OFFER)) }
-}
-
-#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_disableDtlsAndSetSrtpKey(
     _session_description: webrtc::ptr::Borrowed<RffiSessionDescription>,
     _crypto_suite: SrtpCryptoSuite,

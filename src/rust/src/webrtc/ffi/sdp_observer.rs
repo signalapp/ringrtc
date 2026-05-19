@@ -60,14 +60,6 @@ unsafe extern "C" {
         desc: webrtc::ptr::Borrowed<RffiSessionDescription>,
     ) -> webrtc::ptr::Owned<c_char>;
 
-    pub fn Rust_answerFromSdp(
-        sdp: webrtc::ptr::Borrowed<c_char>,
-    ) -> webrtc::ptr::Owned<RffiSessionDescription>;
-
-    pub fn Rust_offerFromSdp(
-        sdp: webrtc::ptr::Borrowed<c_char>,
-    ) -> webrtc::ptr::Owned<RffiSessionDescription>;
-
     pub fn Rust_disableDtlsAndSetSrtpKey(
         session_description: webrtc::ptr::Borrowed<RffiSessionDescription>,
         crypto_suite: SrtpCryptoSuite,

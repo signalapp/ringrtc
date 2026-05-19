@@ -147,30 +147,6 @@ impl SessionDescription {
         Ok(sdp_copy)
     }
 
-    /// Create a SDP answer from the session description string.
-    pub fn answer_from_sdp(sdp: String) -> Result<Self> {
-        let sdp = CString::new(sdp)?;
-        let answer = webrtc::ptr::Unique::from(unsafe {
-            sdp::Rust_answerFromSdp(webrtc::ptr::Borrowed::from_ptr(sdp.as_ptr()))
-        });
-        if answer.is_null() {
-            return Err(RingRtcError::ConvertSdpAnswer.into());
-        }
-        Ok(SessionDescription::new(answer))
-    }
-
-    /// Create a SDP offer from the session description string.
-    pub fn offer_from_sdp(sdp: String) -> Result<Self> {
-        let sdp = CString::new(sdp)?;
-        let offer = webrtc::ptr::Unique::from(unsafe {
-            sdp::Rust_offerFromSdp(webrtc::ptr::Borrowed::from_ptr(sdp.as_ptr()))
-        });
-        if offer.is_null() {
-            return Err(RingRtcError::ConvertSdpOffer.into());
-        }
-        Ok(SessionDescription::new(offer))
-    }
-
     pub fn disable_dtls_and_set_srtp_key(&mut self, key: &SrtpKey) -> Result<()> {
         let success = unsafe {
             sdp::Rust_disableDtlsAndSetSrtpKey(
