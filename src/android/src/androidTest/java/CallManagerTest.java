@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import org.signal.ringrtc.CallException;
+import org.signal.ringrtc.CallId;
 import org.signal.ringrtc.CallManager;
 import org.signal.ringrtc.GroupCall;
 
@@ -18,8 +20,10 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
 import static org.mockito.Mockito.*;
 
 public class CallManagerTest extends CallTestBase {
@@ -146,5 +150,79 @@ public class CallManagerTest extends CallTestBase {
 
         callManager.receivedHttpResponse(requestId.getValue(), 404, new byte[] {});
         latch.await();
+    }
+
+    @Test
+    public void testFromEraIdRoundTrip() {
+        CallId a1 = CallId.fromEra("mesozoic");
+        CallId a2 = CallId.fromEra("mesozoic");
+        CallId b  = CallId.fromEra("cenozoic");
+        errors.checkThat(a1, is(a2));
+        errors.checkThat(a1, is(not(b)));
+        errors.checkThat(a1.longValue(), is(not(0L)));
+    }
+
+    @Test
+    public void testAddAssetWithNoSourceThrows() throws Exception {
+        CallManager callManager = CallManager.createCallManager(mock());
+        try {
+            callManager.addAsset("group", (byte[]) null);
+            errors.addError(new AssertionError("expected CallException"));
+        } catch (CallException ex) {
+            errors.checkThat(ex.getMessage(),
+                is("addAsset requires either a filePath or content"));
+        }
+    }
+
+    @Test
+    public void testSetAudioEnableNoActiveCallThrows() throws Exception {
+        CallManager callManager = CallManager.createCallManager(mock());
+        try {
+            callManager.setAudioEnable(true);
+            errors.addError(new AssertionError("expected CallException"));
+        } catch (CallException ex) {
+        }
+    }
+
+    @Test
+    public void testPeekWithManyMembers() throws Exception {
+        final int GROUP_SIZE = 256;
+        final int PARTICIPANTS = 100;
+        CallManager.Observer observer = mock();
+        CallManager callManager = CallManager.createCallManager(observer);
+
+        GroupCall.GroupMemberInfo[] memberInfos = new GroupCall.GroupMemberInfo[GROUP_SIZE];
+        StringBuilder participants = new StringBuilder("[");
+        for (int i = 0; i < GROUP_SIZE; i++) {
+            byte[] opaque = fakeOpaqueUserId(i);
+            memberInfos[i] = new GroupCall.GroupMemberInfo(UUID.nameUUIDFromBytes(opaque), opaque);
+            if (i < PARTICIPANTS) {
+                if (i > 0) participants.append(',');
+                participants.append("{\"opaqueUserId\":\"")
+                            .append(sha256Hex(opaque))
+                            .append("\",\"demuxId\":")
+                            .append(32 * (i + 1))
+                            .append('}');
+            }
+        }
+        participants.append(']');
+
+        String body = "{\"conferenceId\":\"jurassic\",\"maxDevices\":" + (PARTICIPANTS + 1)
+                    + ",\"participants\":" + participants + ",\"pendingClients\":[]}";
+
+        CountDownLatch latch = new CountDownLatch(1);
+        callManager.peekGroupCall("sfu.example", new byte[] { 1, 2, 3 }, Arrays.asList(memberInfos), result -> {
+            errors.checkThat(result.getEraId(), is("jurassic"));
+            errors.checkThat(result.getDeviceCountIncludingPendingDevices(), is((long) PARTICIPANTS));
+            errors.checkThat(result.getJoinedMembers().size(), is(PARTICIPANTS));
+            latch.countDown();
+        });
+
+        ArgumentCaptor<Long> requestId = ArgumentCaptor.forClass(Long.class);
+        verify(observer).onSendHttpRequest(requestId.capture(), startsWith("sfu.example"), eq(CallManager.HttpMethod.GET), any(), any());
+
+        callManager.receivedHttpResponse(requestId.getValue(), 200, body.getBytes("UTF-8"));
+        errors.checkThat("peek result lambda fired",
+            latch.await(30, TimeUnit.SECONDS), is(true));
     }
 }

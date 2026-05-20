@@ -6,7 +6,7 @@
 //! Re-exports WebRTC JNI interfaces
 
 use jni::{
-    JNIEnv,
+    EnvUnowned,
     objects::{JClass, JObject},
     sys::jlong,
 };
@@ -17,7 +17,7 @@ unsafe extern "C" {
     /// Export the nativeCreatePeerConnection() call from the
     /// org.webrtc.PeerConnectionFactory class.
     pub fn Java_org_webrtc_PeerConnectionFactory_nativeCreatePeerConnection(
-        env: JNIEnv,
+        unowned_env: EnvUnowned,
         class: JClass,
         factory: jlong,
         rtcConfig: JObject,

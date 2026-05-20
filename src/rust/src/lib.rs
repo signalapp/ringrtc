@@ -70,6 +70,7 @@ mod android {
     mod call_manager;
     mod error;
     mod logging;
+    mod types;
     mod webrtc_java_media_stream;
     mod webrtc_peer_connection_factory;
 }

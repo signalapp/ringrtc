@@ -5,40 +5,76 @@
 
 //! Android Error Codes and Utilities.
 
-use anyhow::Error;
-use jni::{JNIEnv, errors, objects::JThrowable};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+use jni::{
+    Env,
+    errors::ErrorPolicy,
+    jni_str,
+    objects::JThrowable,
+    strings::{JNIStr, JNIString},
+};
 use thiserror::Error;
 
-use crate::{android::jni_util::*, core::util::try_scoped};
+use crate::core::util::try_scoped;
 
-const CALL_EXCEPTION_CLASS: &str = jni_class_name!(org.signal.ringrtc.CallException);
+const CALL_EXCEPTION_CLASS: &JNIStr = jni_str!("org/signal/ringrtc/CallException");
 
-/// Convert a `Error` into a Java `org.signal.ringrtc.CallException`
-/// and throw it.
-///
-/// This is used to communicate synchronous errors to the client
-/// application.
-pub fn throw_error(env: &mut JNIEnv, error: Error) {
-    if let Ok(exception) = env.exception_occurred() {
-        if env.exception_clear().is_ok() {
+/// `ErrorPolicy` that converts Rust errors and panics into a Java
+/// `org.signal.ringrtc.CallException` and throws it to the client.
+#[derive(Debug, Default)]
+pub struct ThrowCallException;
+
+impl<T: Default> ErrorPolicy<T, anyhow::Error> for ThrowCallException {
+    type Captures<'unowned_env_local: 'native_method, 'native_method> = ();
+
+    fn on_error<'unowned_env_local: 'native_method, 'native_method>(
+        env: &mut Env<'unowned_env_local>,
+        _cap: &mut Self::Captures<'unowned_env_local, 'native_method>,
+        err: anyhow::Error,
+    ) -> jni::errors::Result<T> {
+        // If the closure returned an error while a Java exception was already
+        // pending, preserve that exception as the cause.
+        if let Some(exception) = env.exception_occurred() {
+            env.exception_clear();
             let _ = try_scoped(|| {
-                let message = env.new_string(error.to_string())?;
-                let call_exception: JThrowable = jni_new_object(
-                    env,
-                    CALL_EXCEPTION_CLASS,
-                    jni_args!((
-                        message => java.lang.String,
-                        exception => java.lang.Throwable,
-                    ) -> void),
-                )?
-                .into();
-                Ok(env.throw(call_exception)?)
+                let message = env.new_string(err.to_string())?;
+                let call_exception = jni_new_object!(env, CALL_EXCEPTION_CLASS, (
+                    message => java.lang.String,
+                    exception => java.lang.Throwable,
+                ))?;
+                // SAFETY: We just constructed CallException, which extends Throwable.
+                let throwable = unsafe { JThrowable::from_raw(env, call_exception.as_raw()) };
+                Ok(env.throw(throwable)?)
             });
         } else {
-            // Don't try to throw our own exception on top of another exception.
+            let jni_msg = JNIString::from(format!("{}", err));
+            let _ = env.throw_new(CALL_EXCEPTION_CLASS, &jni_msg);
         }
-    } else {
-        let _ = env.throw_new(CALL_EXCEPTION_CLASS, format!("{}", error));
+        Ok(T::default())
+    }
+
+    fn on_panic<'unowned_env_local: 'native_method, 'native_method>(
+        env: &mut Env<'unowned_env_local>,
+        _cap: &mut Self::Captures<'unowned_env_local, 'native_method>,
+        payload: Box<dyn std::any::Any + Send + 'static>,
+    ) -> jni::errors::Result<T> {
+        let panic_string = match payload.downcast::<&'static str>() {
+            Ok(s) => (*s).to_string(),
+            Err(payload) => match payload.downcast::<String>() {
+                Ok(s) => *s,
+                Err(payload) => {
+                    if let Err(drop_panic) = catch_unwind(AssertUnwindSafe(|| drop(payload))) {
+                        log::error!("Panic while dropping panic payload: {:?}", drop_panic);
+                        std::mem::forget(drop_panic);
+                    }
+                    "".to_string()
+                }
+            },
+        };
+        let jni_msg = JNIString::from(format!("Rust panic: {panic_string}"));
+        let _ = env.throw_new(CALL_EXCEPTION_CLASS, &jni_msg);
+        Ok(T::default())
     }
 }
 
@@ -48,28 +84,8 @@ pub enum AndroidError {
     // Android JNI error codes
     #[error("JNI: static method lookup failed.  Class: {0}, Method: {1}, Sig: {2}")]
     JniStaticMethodLookup(String, String, String),
-    #[error("JNI: calling method failed.  Method: {0}, Sig: {1}, Error: {2}")]
-    JniCallMethod(String, String, errors::Error),
-    #[error("JNI: calling static method failed.  Class: {0}, Method: {1}, Sig: {2}")]
-    JniCallStaticMethod(String, String, String),
-    #[error("JNI: calling constructor failed.  Constructor: {0}, Sig: {1}")]
-    JniCallConstructor(String, String),
-    #[error("JNI: getting field failed.  Field: {0}, Type: {1}")]
-    JniGetField(String, String),
-    #[error("JNI: class not found.  Type: {0} Add to the cache?")]
-    JniGetLangClassNotFound(String),
-    #[error("JNI: new object failed.  Type: {0}")]
-    JniNewLangObjectFailed(String),
     #[error("JNI: invalid serialized buffer.")]
     JniInvalidSerializedBuffer,
-
-    // Android Class Cache error codes
-    #[error("ClassCache: Class is already in cache: {0}")]
-    ClassCacheDuplicate(String),
-    #[error("ClassCache: class not found in jvm: {0}")]
-    ClassCacheNotFound(String),
-    #[error("ClassCache: class not found in cache: {0}")]
-    ClassCacheLookup(String),
 
     // Android Misc error codes
     #[error("Creating JNI PeerConnection failed")]

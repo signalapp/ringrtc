@@ -1,5 +1,5 @@
 plugins {
-    id 'com.android.library' version '8.4.0'
+    id 'com.android.library' version '9.1.1'
     id 'maven-publish'
     id 'signing'
 }
@@ -15,66 +15,73 @@ ext.release_jni_lib_dirs = project.hasProperty("releaseRingrtcLibDir") ? [releas
 ext.webrtc_jar           = project.hasProperty("webrtcJar") ? webrtcJar : "libs/libwebrtc.jar"
 ext.asset_dir            = project.hasProperty("assetDir") ? assetDir : "assets"
 
-android {
-    namespace 'org.signal.ringrtc'
+base {
+    archivesName = "ringrtc-android"
+}
 
-    compileSdk 34
+android {
+    namespace = 'org.signal.ringrtc'
+
+    compileSdk = 34
 
     defaultConfig {
-        minSdk 21
-        targetSdk 33
-        versionName ringrtcVersion
-        archivesBaseName = "ringrtc-android"
+        minSdk = 21
+        targetSdk = 33
+        versionName = ringrtcVersion
         consumerProguardFiles "proguard-rules.pro"
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     sourceSets {
         release {
             jniLibs.srcDirs = release_jni_lib_dirs
             java.srcDirs = ['api/']
-            assets.srcDir asset_dir
+            assets.srcDirs = [asset_dir]
         }
         debug {
             jniLibs.srcDirs = debug_jni_lib_dirs
             java.srcDirs = ['api/']
-            assets.srcDir asset_dir
+            assets.srcDirs = [asset_dir]
         }
     }
 
     compileOptions {
-        coreLibraryDesugaringEnabled true
+        coreLibraryDesugaringEnabled = true
     }
 
-    packagingOptions {
+    packaging {
         // Libraries are already stripped if necessary when linked.
-        doNotStrip "**/*.so"
+        jniLibs.keepDebugSymbols.add('**/*.so')
     }
 
     publishing {
-      singleVariant("release")
+        singleVariant("release")
     }
 }
 
 dependencies {
     api files(webrtc_jar)
-    api 'androidx.annotation:annotation:1.4.0'
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.6'
-    androidTestImplementation "androidx.test:runner:1.4.0"
-    androidTestImplementation "androidx.test:core:1.4.0"
-    androidTestImplementation "org.mockito:mockito-android:5.1.1"
+    api 'androidx.annotation:annotation:1.10.0'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+    androidTestImplementation "androidx.test:runner:1.5.0"
+    androidTestImplementation "androidx.test:core:1.5.0"
+    androidTestImplementation "org.mockito:mockito-android:5.12.0"
 }
 
-task javadoc(type: Javadoc) {
-    source = android.sourceSets.release.java.sourceFiles
-    classpath += files(android.bootClasspath)
-    // There doesn't seem to be a convenient way to do this with just one variant.
-    android.libraryVariants.all { v ->
-        classpath += v.getCompileClasspath(null)
+tasks.register('javadoc', Javadoc) {
+    source = fileTree(dir: 'api', include: '**/*.java')
+    failOnError = false
+    if (project.hasProperty('docsDir')) {
+        destinationDir = new File(docsDir, 'javadoc')
     }
-    // Normally this is set by the 'java' plugin, but that's not compatible with 'android-library'
-    if (project.hasProperty("docsDir")) {
-        destinationDir = new File(docsDir, "javadoc")
+}
+
+androidComponents {
+    onVariants(selector().withBuildType('release')) { variant ->
+        tasks.named('javadoc').configure { task ->
+            task.classpath = files(androidComponents.sdkComponents.bootClasspath) +
+                project.configurations.named("${variant.name}CompileClasspath").get()
+        }
     }
 }
 
@@ -85,7 +92,7 @@ afterEvaluate {
                 from components.release
 
                 group = 'org.signal'
-                artifactId = archivesBaseName
+                artifactId = base.archivesName.get()
                 version = ringrtcVersion
 
                 pom {
@@ -137,7 +144,7 @@ afterEvaluate {
     }
 
     signing {
-        required { isReleaseVersion && gradle.taskGraph.hasTask(getPath() + ":publish") }
+        required = { isReleaseVersion && gradle.taskGraph.hasTask(getPath() + ":publish") }
 
         def signingKeyId = findProperty("signingKeyId")
         def signingKey = findProperty("signingKey")
@@ -150,8 +157,8 @@ afterEvaluate {
     }
 }
 
-task version {
-    group 'Info'
+tasks.register('version') {
+    group = 'Info'
     description = 'Prints the versions as read from the version config file.'
     doLast {
         println "RingRTC version: " + ringrtcVersion

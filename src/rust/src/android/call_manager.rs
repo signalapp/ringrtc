@@ -8,9 +8,10 @@
 use std::{borrow::Cow, convert::TryFrom, panic, sync::Arc, time::Duration};
 
 use jni::{
-    JNIEnv,
-    objects::{GlobalRef, JByteArray, JClass, JObject, JString},
-    sys::{jbyte, jint, jlong},
+    Env, jni_sig, jni_str,
+    objects::{JByteArray, JClass, JObject, JString},
+    signature::FieldSignature,
+    sys::{jbyte, jint, jlong, jobject},
 };
 use log::Level;
 
@@ -18,7 +19,6 @@ use crate::{
     android::{
         android_platform::{AndroidCallContext, AndroidPlatform},
         error::AndroidError,
-        jni_util::*,
         logging::init_logging,
         webrtc_peer_connection_factory::*,
     },
@@ -50,25 +50,23 @@ use crate::{
 pub type AndroidCallManager = CallManager<AndroidPlatform>;
 
 /// CMI request for build time information
-pub fn get_build_info<'a>(env: &mut JNIEnv<'a>) -> Result<JObject<'a>> {
+pub fn get_build_info<'a>(env: &mut Env<'a>) -> Result<JObject<'a>> {
     #[cfg(all(debug_assertions, not(test)))]
     let debug = true;
     #[cfg(any(not(debug_assertions), test))]
     let debug = false;
 
-    let result = jni_new_object(
+    Ok(jni_new_object!(
         env,
-        jni_class_name!(org.signal.ringrtc.BuildInfo),
-        jni_args!((debug => boolean) -> void),
-    )?;
-
-    Ok(result)
+        jni_str!("org/signal/ringrtc/BuildInfo"),
+        (debug => boolean)
+    )?)
 }
 
 /// Library initialization routine.
 ///
 /// Sets up the logging infrastructure.
-pub fn initialize(env: &mut JNIEnv) -> Result<()> {
+pub fn initialize(env: &mut Env) -> Result<()> {
     init_logging(env, Level::Debug)?;
 
     // Set a custom panic handler that uses the logger instead of
@@ -81,7 +79,7 @@ pub fn initialize(env: &mut JNIEnv) -> Result<()> {
 }
 
 /// Creates a new AndroidCallManager object.
-pub fn create_call_manager(env: &mut JNIEnv, jni_call_manager: JObject) -> Result<jlong> {
+pub fn create_call_manager(env: &mut Env, jni_call_manager: JObject) -> Result<jlong> {
     let platform = AndroidPlatform::new(env, env.new_global_ref(jni_call_manager)?)?;
 
     let http_client = http::DelegatingClient::new(platform.try_clone()?);
@@ -94,7 +92,7 @@ pub fn create_call_manager(env: &mut JNIEnv, jni_call_manager: JObject) -> Resul
 
 /// Create a org.webrtc.PeerConnection object
 pub fn create_peer_connection(
-    env: &mut JNIEnv,
+    env: &mut Env,
     peer_connection_factory: jlong,
     mut native_connection: webrtc::ptr::Borrowed<Connection<AndroidPlatform>>,
     jni_rtc_config: JObject,
@@ -121,8 +119,8 @@ pub fn create_peer_connection(
     // construct JNI OwnedPeerConnection object
     let jni_owned_pc = unsafe {
         Java_org_webrtc_PeerConnectionFactory_nativeCreatePeerConnection(
-            env.unsafe_clone(),
-            JClass::from(JObject::null()),
+            jni::EnvUnowned::from_raw(env.get_raw()),
+            JClass::default(),
             peer_connection_factory,
             jni_rtc_config,
             jni_media_constraints,
@@ -161,7 +159,7 @@ pub fn create_peer_connection(
 
 /// Application notification updating the current user's UUID
 pub fn set_self_uuid(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     uuid: JByteArray,
 ) -> Result<()> {
@@ -171,7 +169,7 @@ pub fn set_self_uuid(
 
 /// Adds an asset to the asset manager.
 pub fn add_asset(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     asset_group: JString,
     file_path: JString,
@@ -179,12 +177,12 @@ pub fn add_asset(
 ) -> Result<()> {
     use crate::core::assets::AssetHandle;
 
-    let asset_group: String = env.get_string(&asset_group)?.into();
+    let asset_group: String = asset_group.try_to_string(env)?;
 
     let handle = if !content.is_null() {
         AssetHandle::Content(env.convert_byte_array(content)?)
     } else if !file_path.is_null() {
-        let path: String = env.get_string(&file_path)?.into();
+        let path: String = file_path.try_to_string(env)?;
         AssetHandle::FilePath(path)
     } else {
         return Err(anyhow::anyhow!(
@@ -198,20 +196,20 @@ pub fn add_asset(
 
 /// Application notification to start a new call
 pub fn call(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     jni_remote: JObject,
     call_media_type: CallMediaType,
     local_device_id: DeviceId,
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
-    let app_remote_peer = env.new_global_ref(jni_remote)?;
+    let app_remote_peer = Arc::new(env.new_global_ref(jni_remote)?);
     call_manager.call(app_remote_peer, call_media_type, local_device_id)
 }
 
 /// Application notification to proceed with a new call
 pub fn proceed(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     jni_call_context: JObject,
@@ -254,7 +252,7 @@ pub fn hangup(call_manager: *mut AndroidCallManager) -> Result<()> {
 
 /// Application notification cancelling a group call ring
 pub fn cancel_group_ring(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     group_id: JByteArray,
     ring_id: jlong,
@@ -277,7 +275,7 @@ pub fn cancel_group_ring(
 /// Application notification of received answer message
 #[allow(clippy::too_many_arguments)]
 pub fn received_answer(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     remote_peer: JObject,
@@ -288,7 +286,7 @@ pub fn received_answer(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    let remote_peer = env.new_global_ref(remote_peer)?;
+    let remote_peer = Arc::new(env.new_global_ref(remote_peer)?);
 
     let opaque = if opaque.is_null() {
         return Err(RingRtcError::OptionValueNotSet(
@@ -317,7 +315,7 @@ pub fn received_answer(
 /// Application notification of received offer message
 #[allow(clippy::too_many_arguments)]
 pub fn received_offer(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     remote_peer: JObject,
@@ -331,7 +329,7 @@ pub fn received_offer(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    let remote_peer = env.new_global_ref(remote_peer)?;
+    let remote_peer = Arc::new(env.new_global_ref(remote_peer)?);
 
     let opaque = if opaque.is_null() {
         return Err(RingRtcError::OptionValueNotSet(
@@ -361,7 +359,7 @@ pub fn received_offer(
 
 /// Application notification to add ICE candidates to a Connection
 pub fn received_ice(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     remote_peer: JObject,
@@ -370,14 +368,15 @@ pub fn received_ice(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    let remote_peer = env.new_global_ref(remote_peer)?;
+    let remote_peer = Arc::new(env.new_global_ref(remote_peer)?);
 
     // Convert Java list of byte[] into Rust Vector of IceCandidate
-    let jni_ice_candidates = env.get_list(&candidates)?;
+    let jni_ice_candidates = jni::objects::JList::cast_local(env, candidates)?;
     let mut ice_candidates = Vec::new();
-    let mut iterator = jni_ice_candidates.iter(env)?;
+    let iterator = jni_ice_candidates.iter(env)?;
     while let Some(jni_ice_candidate) = iterator.next(env)? {
-        let jni_ice_candidate: JByteArray<'_> = jni_ice_candidate.into();
+        // SAFETY: Java side must provide a `List<byte[]>`, so each element is `byte[]`.
+        let jni_ice_candidate = unsafe { JByteArray::from_raw(env, jni_ice_candidate.as_raw()) };
         let opaque = env.convert_byte_array(jni_ice_candidate)?;
         ice_candidates.push(signaling::IceCandidate::new(opaque));
     }
@@ -396,7 +395,7 @@ pub fn received_ice(
 
 /// Application notification of received Hangup message
 pub fn received_hangup(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     remote_peer: JObject,
@@ -406,7 +405,7 @@ pub fn received_hangup(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    let remote_peer = env.new_global_ref(remote_peer)?;
+    let remote_peer = Arc::new(env.new_global_ref(remote_peer)?);
 
     call_manager.received_hangup(
         remote_peer,
@@ -420,7 +419,7 @@ pub fn received_hangup(
 
 /// Application notification of received Busy message
 pub fn received_busy(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     call_id: jlong,
     remote_peer: JObject,
@@ -428,7 +427,7 @@ pub fn received_busy(
 ) -> Result<()> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call_id = CallId::from(call_id);
-    let remote_peer = env.new_global_ref(remote_peer)?;
+    let remote_peer = Arc::new(env.new_global_ref(remote_peer)?);
 
     call_manager.received_busy(
         remote_peer,
@@ -439,7 +438,7 @@ pub fn received_busy(
 
 /// Application notification of received call message.
 pub fn received_call_message(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     sender_uuid: JByteArray,
     sender_device_id: DeviceId,
@@ -474,7 +473,7 @@ pub fn received_call_message(
 
 /// Application notification of received HTTP response.
 pub fn received_http_response(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     request_id: jlong,
     status_code: jint,
@@ -512,22 +511,22 @@ pub fn accept_call(call_manager: *mut AndroidCallManager, call_id: jlong) -> Res
     call_manager.accept_call(call_id)
 }
 
-/// CMI request for the active Connection object
-pub fn get_active_connection(call_manager: *mut AndroidCallManager) -> Result<GlobalRef> {
+/// CMI request to get the active Connection object (a raw jobject pointing to the Global ref)
+pub fn get_active_connection(call_manager: *mut AndroidCallManager) -> Result<jobject> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let connection = call_manager.active_connection()?;
     let android_connection = connection.app_connection()?;
 
-    Ok(android_connection.to_jni())
+    Ok(android_connection.to_jni().as_raw())
 }
 
-/// CMI request for the active CallContext object
-pub fn get_active_call_context(call_manager: *mut AndroidCallManager) -> Result<GlobalRef> {
+/// CMI request to get the active CallContext object (a raw jobject pointing to the Global ref)
+pub fn get_active_call_context(call_manager: *mut AndroidCallManager) -> Result<jobject> {
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     let call = call_manager.active_call()?;
     let android_call_context = call.call_context()?;
 
-    Ok(android_call_context.to_jni())
+    Ok(android_call_context.to_jni().as_raw())
 }
 
 /// CMI request to set the audio status
@@ -605,14 +604,14 @@ pub fn close(call_manager: *mut AndroidCallManager) -> Result<()> {
 // Call Links
 
 pub fn read_call_link(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
     root_key: JByteArray,
     request_id: jlong,
 ) -> Result<()> {
-    let sfu_url = env.get_string(&sfu_url)?;
+    let sfu_url = sfu_url.try_to_string(env)?;
     let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
     let root_key =
         call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
@@ -634,7 +633,7 @@ pub fn read_call_link(
 
 #[allow(clippy::too_many_arguments)]
 pub fn create_call_link(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     sfu_url: JString,
     create_credential_presentation: JByteArray,
@@ -644,7 +643,7 @@ pub fn create_call_link(
     restrictions: jint,
     request_id: jlong,
 ) -> Result<()> {
-    let sfu_url = env.get_string(&sfu_url)?;
+    let sfu_url = sfu_url.try_to_string(env)?;
     let create_credential_presentation = env.convert_byte_array(create_credential_presentation)?;
     let root_key =
         call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
@@ -672,7 +671,7 @@ pub fn create_call_link(
 
 #[allow(clippy::too_many_arguments)]
 pub fn update_call_link(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
@@ -683,7 +682,7 @@ pub fn update_call_link(
     new_revoked: jint,
     request_id: jlong,
 ) -> Result<()> {
-    let sfu_url = env.get_string(&sfu_url)?;
+    let sfu_url = sfu_url.try_to_string(env)?;
     let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
     let root_key =
         call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
@@ -691,10 +690,10 @@ pub fn update_call_link(
     let new_name = if new_name.is_null() {
         None
     } else {
-        Some(env.get_string(&new_name)?)
+        Some(new_name.try_to_string(env)?)
     };
     let encrypted_name = new_name.map(|name| {
-        let name = Cow::from(&name);
+        let name: &str = &name;
         if name.is_empty() {
             vec![]
         } else {
@@ -731,7 +730,7 @@ pub fn update_call_link(
 
 #[allow(clippy::too_many_arguments)]
 pub fn delete_call_link(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     sfu_url: JString,
     auth_credential_presentation: JByteArray,
@@ -739,7 +738,7 @@ pub fn delete_call_link(
     admin_passkey: JByteArray,
     request_id: jlong,
 ) -> Result<()> {
-    let sfu_url = env.get_string(&sfu_url)?;
+    let sfu_url = sfu_url.try_to_string(env)?;
     let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
     let root_key =
         call_links::CallLinkRootKey::try_from(env.convert_byte_array(root_key)?.as_slice())?;
@@ -789,7 +788,7 @@ fn deserialize_to_group_member_info(
 }
 
 pub fn peek_group_call(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     request_id: jlong,
     sfu_url: JString,
@@ -798,7 +797,7 @@ pub fn peek_group_call(
 ) -> Result<()> {
     let request_id = request_id as u32;
 
-    let sfu_url = env.get_string(&sfu_url)?.into();
+    let sfu_url = sfu_url.try_to_string(env)?;
 
     let membership_proof = env.convert_byte_array(membership_proof)?;
 
@@ -811,7 +810,7 @@ pub fn peek_group_call(
 }
 
 pub fn peek_call_link_call(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     request_id: jlong,
     sfu_url: JString,
@@ -820,7 +819,7 @@ pub fn peek_call_link_call(
 ) -> Result<()> {
     let request_id = request_id as u32;
 
-    let sfu_url = env.get_string(&sfu_url)?;
+    let sfu_url = sfu_url.try_to_string(env)?;
 
     let auth_credential_presentation = env.convert_byte_array(auth_credential_presentation)?;
     let root_key =
@@ -844,7 +843,7 @@ pub fn peek_call_link_call(
 
 #[allow(clippy::too_many_arguments)]
 pub fn create_group_call_client(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     group_id: JByteArray,
     sfu_url: JString,
@@ -856,7 +855,7 @@ pub fn create_group_call_client(
     native_video_track_borrowed_rc: jlong,
 ) -> Result<group_call::ClientId> {
     let group_id = env.convert_byte_array(group_id)?;
-    let sfu_url = env.get_string(&sfu_url)?.into();
+    let sfu_url = sfu_url.try_to_string(env)?;
     let hkdf_extra_info = env.convert_byte_array(hkdf_extra_info)?;
 
     let peer_connection_factory = unsafe {
@@ -909,7 +908,7 @@ pub fn create_group_call_client(
 
 #[allow(clippy::too_many_arguments)]
 pub fn create_call_link_call_client(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     sfu_url: JString,
     endorsement_public_key: JByteArray,
@@ -923,7 +922,7 @@ pub fn create_call_link_call_client(
     native_audio_track_borrowed_rc: jlong,
     native_video_track_borrowed_rc: jlong,
 ) -> Result<group_call::ClientId> {
-    let sfu_url = env.get_string(&sfu_url)?.into();
+    let sfu_url = sfu_url.try_to_string(env)?;
     let endorsement_public_key = env.convert_byte_array(endorsement_public_key)?;
     let auth_presentation = env.convert_byte_array(auth_presentation)?;
     let root_key =
@@ -1086,7 +1085,7 @@ pub fn set_outgoing_group_call_video_is_screenshare(
 }
 
 pub fn group_ring(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     recipient: JByteArray,
@@ -1122,51 +1121,53 @@ pub fn set_data_mode(
 }
 
 pub fn request_video(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     jni_rendered_resolutions: JObject,
     active_speaker_height: jint,
 ) -> Result<()> {
     // Convert Java list of VideoRequest into Rust Vec<group_call::VideoRequest>.
-    let jni_rendered_resolution_list = env.get_list(&jni_rendered_resolutions)?;
+    let jni_rendered_resolution_list =
+        jni::objects::JList::cast_local(env, jni_rendered_resolutions)?;
     let mut rendered_resolutions: Vec<group_call::VideoRequest> = Vec::new();
 
-    let mut iterator = jni_rendered_resolution_list.iter(env)?;
+    let iterator = jni_rendered_resolution_list.iter(env)?;
     while let Some(jni_rendered_resolution) = iterator.next(env)? {
-        const LONG_TYPE: &str = jni_signature!(long);
-        const INT_TYPE: &str = jni_signature!(int);
-        const NULLABLE_INT_TYPE: &str = jni_signature!(java.lang.Integer);
+        const LONG_TYPE: FieldSignature<'static> = jni_sig!(long);
+        const INT_TYPE: FieldSignature<'static> = jni_sig!(int);
+        const NULLABLE_INT_TYPE: FieldSignature<'static> = jni_sig!(java.lang.Integer);
 
-        const DEMUX_ID_FIELD: &str = "demuxId";
-        let demux_id =
-            jni_get_field(env, &jni_rendered_resolution, DEMUX_ID_FIELD, LONG_TYPE)?.j()?;
+        let demux_id = env
+            .get_field(&jni_rendered_resolution, jni_str!("demuxId"), &LONG_TYPE)?
+            .into_long()?;
         let demux_id = demux_id as u32;
 
-        const WIDTH_FIELD: &str = "width";
-        let width = jni_get_field(env, &jni_rendered_resolution, WIDTH_FIELD, INT_TYPE)?.i()?;
+        let width = env
+            .get_field(&jni_rendered_resolution, jni_str!("width"), &INT_TYPE)?
+            .into_int()?;
         let width = width as u16;
 
-        const HEIGHT_FIELD: &str = "height";
-        let height = jni_get_field(env, &jni_rendered_resolution, HEIGHT_FIELD, INT_TYPE)?.i()?;
+        let height = env
+            .get_field(&jni_rendered_resolution, jni_str!("height"), &INT_TYPE)?
+            .into_int()?;
         let height = height as u16;
 
-        const FRAMERATE_FIELD: &str = "framerate";
-        let framerate = jni_get_field(
-            env,
-            &jni_rendered_resolution,
-            FRAMERATE_FIELD,
-            NULLABLE_INT_TYPE,
-        )?
-        .l()?;
+        let framerate = env
+            .get_field(
+                &jni_rendered_resolution,
+                jni_str!("framerate"),
+                &NULLABLE_INT_TYPE,
+            )?
+            .into_object()?;
         let framerate = if framerate.is_null() {
             None
         } else {
             // We have java.lang.Integer, so we need to invoke the function to get the actual
             // int value that is attached to it.
-            match env.call_method(framerate, "intValue", jni_signature!(() -> int), &[]) {
+            match env.call_method(framerate, jni_str!("intValue"), jni_sig!(() -> int), &[]) {
                 Ok(jvalue) => {
-                    match jvalue.i() {
+                    match jvalue.into_int() {
                         Ok(int) => Some(int.to_owned() as u16),
                         Err(_) => {
                             // The framerate can be ignored.
@@ -1201,7 +1202,7 @@ pub fn request_video(
 }
 
 pub fn approve_user(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     other_user_id: JByteArray,
@@ -1213,7 +1214,7 @@ pub fn approve_user(
 }
 
 pub fn deny_user(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     other_user_id: JByteArray,
@@ -1245,7 +1246,7 @@ pub fn block_client(
 }
 
 pub fn set_group_members(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     jni_serialized_group_members: JByteArray,
@@ -1258,7 +1259,7 @@ pub fn set_group_members(
 }
 
 pub fn set_membership_proof(
-    env: &JNIEnv,
+    env: &Env,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     proof: JByteArray,
@@ -1270,12 +1271,12 @@ pub fn set_membership_proof(
 }
 
 pub fn react(
-    env: &mut JNIEnv,
+    env: &mut Env,
     call_manager: *mut AndroidCallManager,
     client_id: group_call::ClientId,
     value: JString,
 ) -> Result<()> {
-    let value = env.get_string(&value)?.into();
+    let value: String = value.try_to_string(env)?;
     let call_manager = unsafe { ptr_as_mut(call_manager)? };
     call_manager.react(client_id, value);
     Ok(())
