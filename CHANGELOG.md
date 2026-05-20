@@ -1,6 +1,12 @@
 # Changelog
 
-## v2.69.0
+## v2.69.2
+
+- Android: Update to jni 0.22.4 and gradle 9.3.1
+
+- Remove dead SDP code
+
+## v2.69.1
 
 - Add audio redundancy statistics to Call Summary
 
