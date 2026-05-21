@@ -880,7 +880,7 @@ const DELAY_FOR_RECOVERED_BWE_CALLBACK: Duration = Duration::from_secs(6);
 // so a receiver may leave immediately after receiving a newly
 // generated key and it will be able to decrypt until after
 // a second rotation is applied.
-const MEDIA_SEND_KEY_ROTATION_DELAY_SECS: u64 = 3;
+const MEDIA_SEND_KEY_ROTATION_DELAY_SECS: u64 = 5;
 
 enum KeyRotationState {
     // A key has been applied.  Nothing is pending.
