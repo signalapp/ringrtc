@@ -26,17 +26,17 @@ export class CallLinkRootKey {
   }
 
   static generateAdminPassKey(): Uint8Array<ArrayBuffer> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    // oxlint-disable-next-line typescript/no-unsafe-return
     return Native.CallLinkRootKey_generateAdminPasskey();
   }
 
   deriveRoomId(): Uint8Array<ArrayBuffer> {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    // oxlint-disable-next-line typescript/no-unsafe-return
     return Native.CallLinkRootKey_deriveRoomId(this.bytes);
   }
 
   toString(): string {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    // oxlint-disable-next-line typescript/no-unsafe-return
     return Native.CallLinkRootKey_toFormattedString(this.bytes);
   }
 }

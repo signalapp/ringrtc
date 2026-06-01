@@ -74,7 +74,7 @@ jobs:
       run: npm ci
       working-directory: src/node
     - name: Check typescript
-      run: npm run eslint
+      run: npm run oxlint
       working-directory: src/node
     - name: Check package.json for prebuildChecksum
       run: >-

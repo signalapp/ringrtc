@@ -3,31 +3,34 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
+/* oxlint-disable typescript/no-non-null-assertion */
 
 import { assert, expect, should, use } from 'chai';
 import chaiAsPromised from 'chai-as-promised';
-import { createHash, randomBytes } from 'crypto';
-import {
+import { createHash, randomBytes } from 'node:crypto';
+import type {
   CallEndReason,
-  callIdFromEra,
   CallingMessage,
+  CallSummary,
+  GroupCall,
+  Reaction,
+  SpeechEvent,
+} from '../index';
+import {
+  callIdFromEra,
   CallLinkRestrictions,
   CallLinkRootKey,
   CallRejectReason,
   CallState,
-  CallSummary,
-  GroupCall,
   GroupCallKind,
   GroupMemberInfo,
   HttpMethod,
   OfferType,
   PeekStatusCodes,
-  Reaction,
   RingRTC,
-  SpeechEvent,
 } from '../index';
-import sinon, { SinonSpy } from 'sinon';
+import type { SinonSpy } from 'sinon';
+import sinon from 'sinon';
 import sinonChai from 'sinon-chai';
 import { CallingClass } from './CallingClass';
 import { countDownLatch, log, sleep, uuidToBytes } from './Utils';
@@ -46,7 +49,7 @@ function generateOfferCallingMessage(callId: bigint): CallingMessage {
   );
   return {
     offer: {
-      callId: callId,
+      callId,
       opaque: audioOnlySdp,
       type: OfferType.AudioCall,
     },
@@ -90,7 +93,7 @@ describe('RingRTC', () => {
         reason: CallRejectReason;
         ageSec: number;
       }>((resolve, _reject) => {
-        /* eslint-disable @typescript-eslint/no-shadow */
+        /* oxlint-disable typescript/no-shadow */
         RingRTC.handleRejectedIncomingCallRequest = (
           _callId,
           _remoteUserId,
@@ -99,7 +102,7 @@ describe('RingRTC', () => {
         ) => {
           resolve({ reason, ageSec });
         };
-        /* eslint-enable @typescript-eslint/no-shadow */
+        /* oxlint-enable typescript/no-shadow */
         RingRTC.handleCallingMessage(offer, {
           remoteUserId: 'remote',
           remoteDeviceId: 4,
@@ -143,7 +146,7 @@ describe('RingRTC', () => {
         reason: CallRejectReason;
         ageSec: number;
       }>((resolve, _reject) => {
-        /* eslint-disable @typescript-eslint/no-shadow */
+        /* oxlint-disable typescript/no-shadow */
         RingRTC.handleRejectedIncomingCallRequest = (
           _callId,
           _remoteUserId,
@@ -152,7 +155,7 @@ describe('RingRTC', () => {
         ) => {
           resolve({ reason, ageSec });
         };
-        /* eslint-enable @typescript-eslint/no-shadow */
+        /* oxlint-enable typescript/no-shadow */
         RingRTC.handleCallingMessage(offer, {
           remoteUserId: 'remote',
           remoteDeviceId: 4,
@@ -277,7 +280,9 @@ describe('RingRTC', () => {
     delayIncomingCallSettings: number,
     delayOutgoingCallSettings: number
   ) {
+    // oxlint-disable-next-line eslint/no-param-reassign
     calling.delayOutgoingCallSettingsRequest = delayOutgoingCallSettings;
+    // oxlint-disable-next-line eslint/no-param-reassign
     calling.delayIncomingCallSettingsRequest = delayIncomingCallSettings;
 
     const outgoingCallLatch = countDownLatch(1);
@@ -1103,7 +1108,7 @@ describe('RingRTC', () => {
     });
 
     class NullGroupObserver {
-      /* eslint-disable @typescript-eslint/no-empty-function */
+      /* oxlint-disable typescript/no-empty-function */
       requestMembershipProof(_call: GroupCall) {}
       requestGroupMembers(_call: GroupCall) {}
       onLocalDeviceStateChanged(_call: GroupCall) {}
@@ -1125,7 +1130,7 @@ describe('RingRTC', () => {
         _sourceDemuxId: number,
         _targetDemuxId: number
       ) {}
-      /* eslint-enable @typescript-eslint/no-empty-function */
+      /* oxlint-enable typescript/no-empty-function */
     }
 
     it('can create a call and try to connect', async () => {

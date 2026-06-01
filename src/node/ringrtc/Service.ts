@@ -3,14 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-/* eslint-disable max-classes-per-file */
-
 import {
   CallLinkState,
   CallLinkRestrictions,
   CallLinkRootKey,
 } from './CallLinks';
-import { CallSummary } from './CallSummary';
+import type { CallSummary } from './CallSummary';
 import Native from './Native';
 
 const INVALID_CLIENT_ID = 0;
@@ -39,23 +37,19 @@ class NativeCallManager {
   }
 
   private createCallEndpoint(config: Config) {
-    const fieldTrials = Object.assign(
-      {
-        'RingRTC-AnyAddressPortsKillSwitch': 'Enabled',
-        'RingRTC-PruneTurnPorts': 'Enabled',
-        'WebRTC-Bwe-ProbingConfiguration':
-          'skip_if_est_larger_than_fraction_of_max:0.99',
-        'WebRTC-IncreaseIceCandidatePriorityHostSrflx': 'Enabled',
-      },
-      config.field_trials
-    );
+    const fieldTrials = {
+      'RingRTC-AnyAddressPortsKillSwitch': 'Enabled',
+      'RingRTC-PruneTurnPorts': 'Enabled',
+      'WebRTC-Bwe-ProbingConfiguration':
+        'skip_if_est_larger_than_fraction_of_max:0.99',
+      'WebRTC-IncreaseIceCandidatePriorityHostSrflx': 'Enabled',
+      ...config.field_trials,
+    };
 
-    /* eslint-disable prefer-template */
     const fieldTrialsString =
       Object.entries(fieldTrials)
         .map(([k, v]) => `${k}/${v}`)
         .join('/') + '/';
-    /* eslint-enable prefer-template */
     Object.defineProperty(this, Native.callEndpointPropertyKey, {
       configurable: true, // allows it to be changed
       get() {
@@ -65,7 +59,7 @@ class NativeCallManager {
           configurable: true, // allows it to be changed
           value: callEndpoint,
         });
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+        // oxlint-disable-next-line typescript/no-unsafe-return
         return callEndpoint;
       },
     });
@@ -171,18 +165,18 @@ class NativeCallManager {
 type GroupId = Uint8Array<ArrayBuffer>;
 type GroupCallUserId = Uint8Array<ArrayBuffer>;
 
-export interface PeekDeviceInfo {
+export type PeekDeviceInfo = {
   demuxId: number;
   userId?: GroupCallUserId;
-}
+};
 
-export interface Reaction {
+export type Reaction = {
   demuxId: number;
   value: string;
-}
+};
 
 /** type returned by Rust */
-export interface RawPeekInfo {
+export type RawPeekInfo = {
   devices: Array<PeekDeviceInfo>;
   creator?: GroupCallUserId;
   eraId?: string;
@@ -193,10 +187,10 @@ export interface RawPeekInfo {
   deviceCountExcludingPendingDevices: number;
   pendingUsers: Array<GroupCallUserId>;
   callLinkState?: RawCallLinkState;
-}
+};
 
 /** type derived from RawPeekInfo */
-export interface PeekInfo {
+export type PeekInfo = {
   devices: Array<PeekDeviceInfo>;
   creator?: GroupCallUserId;
   eraId?: string;
@@ -207,7 +201,7 @@ export interface PeekInfo {
   deviceCountExcludingPendingDevices: number;
   pendingUsers: Array<GroupCallUserId>;
   callLinkState?: CallLinkState;
-}
+};
 
 export enum PeekStatusCodes {
   EXPIRED_CALL_LINK = 703,
@@ -264,13 +258,13 @@ export class ReceivedAudioLevel {
   }
 }
 
-interface RawCallLinkState {
+type RawCallLinkState = {
   name: string;
   rawRestrictions: number;
   revoked: boolean;
   expiration: Date;
   rootKey: Uint8Array<ArrayBuffer>;
-}
+};
 
 function normalizeAudioLevel(raw: RawAudioLevel): NormalizedAudioLevel {
   return raw / 32767;
@@ -299,9 +293,8 @@ function rawCallLinkStateToCallLinkState(
       raw.expiration,
       new CallLinkRootKey(raw.rootKey)
     );
-  } else {
-    return undefined;
   }
+  return undefined;
 }
 
 function rawPeekInfoToPeekInfo(raw: RawPeekInfo): PeekInfo {
@@ -312,8 +305,10 @@ function rawPeekInfoToPeekInfo(raw: RawPeekInfo): PeekInfo {
 }
 
 class Requests<T> {
-  private _resolveById: Map<number, [(response: T) => void, () => void]> =
-    new Map();
+  private readonly _resolveById = new Map<
+    number,
+    [(response: T) => void, () => void]
+  >();
   private _nextId = 1;
 
   add(): [number, Promise<T>] {
@@ -370,13 +365,13 @@ export type HttpResult<T> =
 export class RingRTCType {
   private readonly callManager: CallManager;
   private _call: Call | null;
-  private _groupCallByClientId: Map<GroupCallClientId, GroupCall>;
-  private _peekRequests: Requests<HttpResult<PeekInfo>>;
-  private _callLinkRequests: Requests<HttpResult<CallLinkState>>;
-  private _emptyRequests: Requests<HttpResult<undefined>>;
+  private readonly _groupCallByClientId: Map<GroupCallClientId, GroupCall>;
+  private readonly _peekRequests: Requests<HttpResult<PeekInfo>>;
+  private readonly _callLinkRequests: Requests<HttpResult<CallLinkState>>;
+  private readonly _emptyRequests: Requests<HttpResult<undefined>>;
 
   // A map to hold call information not maintained in RingRTC.
-  private _callInfoByCallId: Map<string, CallInfo>;
+  private readonly _callInfoByCallId: Map<string, CallInfo>;
 
   private getCallInfoKey(callId: CallId): string {
     return callId.toString();
@@ -928,6 +923,7 @@ export class RingRTCType {
     message: CallingMessage
   ): void {
     if (!broadcast) {
+      // oxlint-disable-next-line eslint/no-param-reassign
       message.destinationDeviceId = remoteDeviceId;
     }
 
@@ -1273,15 +1269,14 @@ export class RingRTCType {
     return promise.then(result => {
       if (result.success) {
         return result.value;
-      } else {
-        return {
-          devices: [],
-          deviceCount: 0,
-          deviceCountIncludingPendingDevices: 0,
-          deviceCountExcludingPendingDevices: 0,
-          pendingUsers: [],
-        };
       }
+      return {
+        devices: [],
+        deviceCount: 0,
+        deviceCountIncludingPendingDevices: 0,
+        deviceCountExcludingPendingDevices: 0,
+        pendingUsers: [],
+      };
     });
   }
 
@@ -1973,24 +1968,24 @@ export class RingRTCType {
   }
 }
 
-export interface CallSettings {
+export type CallSettings = {
   iceServers: Array<IceServer>;
   hideIp: boolean;
   dataMode: DataMode;
   audioLevelsIntervalMillis?: number;
   dredDuration?: number;
-}
+};
 
-interface IceServer {
+type IceServer = {
   username?: string;
   password?: string;
   /** Provide hostname when urls contain IP addresses instead of hostname */
   hostname?: string;
   urls: Array<string>;
-}
+};
 
 // Describes an audio input or output device.
-export interface AudioDevice {
+export type AudioDevice = {
   // Device name.
   name: string;
   // Index of this device, starting from 0.
@@ -1999,7 +1994,7 @@ export interface AudioDevice {
   uniqueId: string;
   // If present, the identifier of a localized string to substitute for the device name.
   i18nKey?: string;
-}
+};
 
 // Given a weird name to not conflict with WebCodec's VideoPixelFormat
 export enum VideoPixelFormatEnum {
@@ -2030,7 +2025,7 @@ export function videoPixelFormatToEnum(
  * VideoFrameSender is used to transmit video frames (from a camera or screen share) over
  * RTP via the RingRTC library.
  */
-export interface VideoFrameSender {
+export type VideoFrameSender = {
   /**
    * Sends a video frame to be transmitted via RingRTC.
    *
@@ -2045,12 +2040,12 @@ export interface VideoFrameSender {
     format: VideoPixelFormatEnum,
     buffer: Uint8Array<ArrayBuffer>
   ): void;
-}
+};
 
 /**
  * Interface for retrieving received video frames from the RingRTC library.
  */
-export interface VideoFrameSource {
+export type VideoFrameSource = {
   /**
    * Copies the latest frame into `buffer`.
    *
@@ -2072,7 +2067,7 @@ export interface VideoFrameSource {
     maxWidth: number,
     maxHeight: number
   ): [number, number] | undefined;
-}
+};
 
 export class Call {
   // The calls' info and state.
@@ -2463,7 +2458,7 @@ export enum GroupCallKind {
   CallLink,
 }
 
-export interface GroupCallObserver {
+export type GroupCallObserver = {
   requestMembershipProof(groupCall: GroupCall): void;
   requestGroupMembers(groupCall: GroupCall): void;
   onLocalDeviceStateChanged(groupCall: GroupCall): void;
@@ -2485,7 +2480,7 @@ export interface GroupCallObserver {
     sourceDemuxId: number,
     targetDemuxId: number
   ): void;
-}
+};
 
 export class GroupCall {
   private readonly _kind: GroupCallKind;
@@ -2498,7 +2493,7 @@ export class GroupCall {
     return this._clientId;
   }
 
-  private _localDeviceState: LocalDeviceState;
+  private readonly _localDeviceState: LocalDeviceState;
   private _remoteDeviceStates: Array<RemoteDeviceState> | undefined;
 
   private _peekInfo: PeekInfo | undefined;
@@ -2754,7 +2749,7 @@ export class GroupCall {
     // We don't get aspect ratios from RingRTC, so make sure to copy them over.
     for (const noo of remoteDeviceStates) {
       const old = this._remoteDeviceStates?.find(
-        old => old.demuxId == noo.demuxId
+        candidate => candidate.demuxId == noo.demuxId
       );
       noo.videoAspectRatio = old?.videoAspectRatio;
     }
@@ -2962,7 +2957,7 @@ export enum RingCancelReason {
   Busy,
 }
 
-export interface CallManager {
+export type CallManager = {
   setConfig(config: Config): void;
   setSelfUuid(uuid: Uint8Array<ArrayBuffer>): void;
   addAsset(
@@ -3193,9 +3188,9 @@ export interface CallManager {
   getAudioOutputs(): Array<AudioDevice>;
   setAudioOutput(index: number): void;
   setVoiceProcessingEnabled(enabled: boolean): void;
-}
+};
 
-export interface CallManagerCallbacks {
+export type CallManagerCallbacks = {
   onStartOutgoingCall(remoteUserId: UserId, callId: CallId): void;
   onStartIncomingCall(
     remoteUserId: UserId,
@@ -3317,7 +3312,7 @@ export interface CallManagerCallbacks {
     line: number,
     message: string
   ): void;
-}
+};
 
 export enum CallState {
   Prering = 'idle',
@@ -3392,9 +3387,8 @@ export enum CallLogLevel {
 
 function sillyDeadlockProtection(f: () => void) {
   void (async () => {
-    // This is a silly way of preventing a deadlock.
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await 0;
+    // Yield so f() runs after unwinding the calling stack.
+    await Promise.resolve();
 
     f();
   })();

@@ -3,33 +3,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-/* eslint-disable no-console, @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
+/* oxlint-disable eslint/no-console typescript/no-unused-vars */
 
-import {
-  DataMode,
+import type {
   Call,
   CallRejectReason,
   CallId,
   CallingMessage,
-  CallLogLevel,
   CallMessageUrgency,
   CallSettings,
-  CallState,
   HttpMethod,
   RingUpdate,
   UserId,
 } from '../ringrtc/Service';
+import { DataMode, CallLogLevel, CallState } from '../ringrtc/Service';
 import { RingRTC } from '../index';
 import { log, sleep, uuidToBytes } from './Utils';
 
 // This class mimics the Desktop Client CallingClass in ts/services/calling.ts to facilitate testing
 export class CallingClass {
-  private _name: string;
-  private _id: string;
-  private _localDeviceId: number;
+  private readonly _name: string;
+  private readonly _id: string;
+  private readonly _localDeviceId: number;
   private _call: Call | undefined;
   private _delayIncomingCallSettingsRequest: number;
-  private _delayOutgoingCallSettingsRequest: number;
+  private readonly _delayOutgoingCallSettingsRequest: number;
 
   set delayIncomingCallSettingsRequest(value: number) {
     this._delayIncomingCallSettingsRequest = value;
@@ -49,7 +47,7 @@ export class CallingClass {
   }
 
   private setupCallCallbacks(call: Call) {
-    // eslint-disable-next-line no-param-reassign
+    // oxlint-disable-next-line eslint/no-param-reassign
     call.handleStateChanged = () => {
       log('handleCallStateChanged');
       log(`call.state === ${call.state}`);
@@ -59,17 +57,17 @@ export class CallingClass {
       }
     };
 
-    // eslint-disable-next-line no-param-reassign
+    // oxlint-disable-next-line eslint/no-param-reassign
     call.handleRemoteAudioEnabled = () => {
       log('handleRemoteAudioEnabled');
     };
 
-    // eslint-disable-next-line no-param-reassign
+    // oxlint-disable-next-line eslint/no-param-reassign
     call.handleRemoteVideoEnabled = () => {
       log('handleRemoteVideoEnabled');
     };
 
-    // eslint-disable-next-line no-param-reassign
+    // oxlint-disable-next-line eslint/no-param-reassign
     call.handleRemoteSharingScreen = () => {
       log('handleRemoteSharingScreen');
     };

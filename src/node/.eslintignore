@@ -1,5 +1,0 @@
-build/**
-dist/**
-
-# TypeScript generated files
-ts/**/*.js

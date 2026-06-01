@@ -3,16 +3,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-/* eslint-disable no-console */
-
-const https = require('https');
+const https = require('node:https');
 const { HttpsProxyAgent } = require('https-proxy-agent');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const tar = require('tar');
-const { Transform } = require('stream');
-const { pipeline } = require('stream/promises');
+const { Transform } = require('node:stream');
+const { pipeline } = require('node:stream/promises');
 
 const VERSION = process.env.npm_package_version;
 
@@ -35,7 +33,7 @@ if (process.env.npm_package_json) {
 }
 
 const URL = config.prebuildUrl.replace(
-  '${npm_package_version}', // eslint-disable-line no-template-curly-in-string
+  '${npm_package_version}', // oxlint-disable-line eslint/no-template-curly-in-string
   VERSION
 );
 const HASH = config.prebuildChecksum;
@@ -71,7 +69,7 @@ async function downloadIfNeeded() {
 function download() {
   console.log(`downloading ${URL}`);
   return new Promise((resolve, reject) => {
-    let options = {};
+    const options = {};
     if (process.env.HTTPS_PROXY != undefined) {
       options.agent = new HttpsProxyAgent(process.env.HTTPS_PROXY);
     }
@@ -107,4 +105,4 @@ function download() {
   });
 }
 
-main();
+void main();

@@ -24,8 +24,8 @@
     "build": "tsc && bash scripts/build-help.sh",
     "clean": "rimraf dist",
     "test": "electron-mocha --renderer --recursive dist/test --timeout 10000 --require source-map-support/register",
-    "eslint": "eslint .",
-    "lint": "npm run format --list-different && npm run eslint",
+    "oxlint": "oxlint --format=stylish",
+    "lint": "npm run format --list-different && npm run oxlint",
     "format": "prettier --write .",
     "check-format": "prettier . --check",
     "install": "node scripts/fetch-prebuild.js",
@@ -39,32 +39,35 @@
   "license": "AGPL-3.0-only",
   "dependencies": {
     "https-proxy-agent": "7.0.6",
-    "tar": "^7.5.2"
+    "tar": "7.5.15"
   },
   "devDependencies": {
     "@types/chai": "5.2.3",
-    "@types/chai-as-promised": "^8.0.2",
-    "@types/lodash": "^4.17.21",
+    "@types/chai-as-promised": "8.0.2",
+    "@types/lodash": "4.17.21",
     "@types/mocha": "10.0.10",
     "@types/node": "25.0.3",
     "@types/sinon-chai": "^4.0.0",
     "chai": "6.2.2",
-    "chai-as-promised": "^8.0.2",
-    "electron": "39.2.4",
+    "chai-as-promised": "8.0.2",
+    "electron": "42.3.0",
     "electron-mocha": "13.1.0",
-    "eslint": "8.56.0",
-    "eslint-config-airbnb-typescript-prettier": "5.0.0",
-    "eslint-config-prettier": "9.1.0",
-    "eslint-plugin-import": "2.29.0",
-    "eslint-plugin-mocha": "10.2.0",
-    "eslint-plugin-more": "1.0.5",
-    "lodash": "4.17.23",
-    "mocha": "11.3.0",
-    "prettier": "3.7.4",
-    "rimraf": "6.1.2",
-    "sinon": "^21.0.1",
-    "sinon-chai": "^4.0.1",
+    "lodash": "4.18.1",
+    "mocha": "11.7.6",
+    "oxlint": "1.65.0",
+    "oxlint-tsgolint": "0.22.1",
+    "prettier": "3.8.3",
+    "rimraf": "6.1.3",
+    "sinon": "22.0.0",
+    "sinon-chai": "4.0.1",
     "source-map-support": "^0.5.21",
-    "typescript": "5.9.3"
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "mocha": {
+      "brace-expansion": "2.0.3",
+      "diff": "8.0.3",
+      "serialize-javascript": "7.0.5"
+    }
   }
 }
