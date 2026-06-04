@@ -150,17 +150,21 @@ impl VideoFrame {
 
     #[must_use]
     pub fn apply_rotation(self) -> Self {
-        if self.metadata.rotation == VideoRotation::None {
+        if self.metadata.rotation == VideoRotation::None || self.rffi_buffer.is_null() {
+            return self;
+        }
+        let rotated = unsafe {
+            media::Rust_copyAndRotateVideoFrameBuffer(
+                self.rffi_buffer.as_borrowed(),
+                self.metadata.rotation,
+            )
+        };
+        if rotated.is_null() {
             return self;
         }
         Self {
             metadata: self.metadata.apply_rotation(),
-            rffi_buffer: webrtc::Arc::from_owned(unsafe {
-                media::Rust_copyAndRotateVideoFrameBuffer(
-                    self.rffi_buffer.as_borrowed(),
-                    self.metadata.rotation,
-                )
-            }),
+            rffi_buffer: webrtc::Arc::from_owned(rotated),
         }
     }
 
@@ -200,7 +204,7 @@ impl VideoFrame {
         Self::from_buffer(metadata, rffi_buffer)
     }
 
-    pub fn to_rgba(&self, rgba_buffer: &mut [u8]) {
+    pub fn to_rgba(&self, rgba_buffer: &mut [u8]) -> bool {
         unsafe {
             media::Rust_convertVideoFrameBufferToRgba(
                 self.rffi_buffer.as_borrowed(),

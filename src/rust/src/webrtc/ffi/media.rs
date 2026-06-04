@@ -97,7 +97,7 @@ unsafe extern "C" {
     pub fn Rust_convertVideoFrameBufferToRgba(
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
         rgba_out: *mut u8,
-    );
+    ) -> bool;
     pub fn Rust_getVideoFrameBufferAsI420(
         buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
     ) -> webrtc::ptr::Borrowed<u8>;

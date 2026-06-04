@@ -9,7 +9,7 @@ use std::{
     convert::TryFrom,
     fmt::Formatter,
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, Once,
         atomic::AtomicBool,
         mpsc::{Receiver, Sender, channel},
     },
@@ -1441,7 +1441,13 @@ fn receive_video_frame<'a>(
 
     if let Some(frame) = frame {
         let frame = frame.apply_rotation();
-        frame.to_rgba(rgba_buffer.as_mut_slice(cx));
+        if !frame.to_rgba(rgba_buffer.as_mut_slice(cx)) {
+            static TO_RGBA_FAILED_ONCE: Once = Once::new();
+            TO_RGBA_FAILED_ONCE.call_once(|| {
+                error!("receive_video_frame(): to_rgba failed, frame is likely not i420");
+            });
+            return Ok(cx.undefined().upcast());
+        }
         let js_width = cx.number(frame.width());
         let js_height = cx.number(frame.height());
         let result = JsArray::new(cx, 2);

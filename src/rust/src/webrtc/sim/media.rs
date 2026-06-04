@@ -100,8 +100,9 @@ pub unsafe fn Rust_copyVideoFrameBufferFromRgba(
 pub unsafe fn Rust_convertVideoFrameBufferToRgba(
     _buffer: webrtc::ptr::BorrowedRc<RffiVideoFrameBuffer>,
     _rgba_out: *mut u8,
-) {
+) -> bool {
     info!("Rust_convertVideoFrameBufferToRgba()");
+    true
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
