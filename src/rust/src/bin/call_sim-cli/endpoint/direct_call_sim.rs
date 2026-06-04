@@ -64,6 +64,8 @@ impl CallStateHandler for CallEndpoint {
                 && let Some(connected_sender) = &state.event_sync.connected
             {
                 let _ = connected_sender.send(());
+            } else if let CallState::Ended(_, summary) = call_state {
+                info!("{}", summary);
             }
         });
         Ok(())

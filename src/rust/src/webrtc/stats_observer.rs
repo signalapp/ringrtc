@@ -99,6 +99,20 @@ macro_rules! delta {
     };
 }
 
+fn signed_delta_fn<T, F, V>(lhs: &T, rhs: &T, extract: F) -> V
+where
+    F: Fn(&T) -> V,
+    V: Sub<Output = V>,
+{
+    extract(lhs) - extract(rhs)
+}
+
+macro_rules! signed_delta {
+    ($lhs:tt, $rhs:tt, $field:tt) => {
+        signed_delta_fn($lhs, $rhs, |stats| stats.$field)
+    };
+}
+
 fn compute_packets_lost_pct(packets_lost: u32, packets_total: u32) -> f32 {
     (packets_lost as f32 * 100.0)
         .naive_checked_div(packets_total as f32)
@@ -280,10 +294,11 @@ pub struct AudioReceiverStatsSnapshot {
     pub jitter: f64,
     pub jitter_buffer_delay: f64,
     pub jitter_buffer_target_delay: f64,
+    pub jitter_buffer_flushes: u64,
     pub audio_energy: f64,
-    pub total_samples_received: u64,
-    pub concealed_samples: u64,
+    pub concealed_samples_pct: f32,
     pub fec_packets_received: u64,
+    pub relative_arrival_delay_per_packet: f64,
 }
 
 impl Display for AudioReceiverStatsSnapshot {
@@ -296,25 +311,27 @@ impl Display for AudioReceiverStatsSnapshot {
             jitter,
             jitter_buffer_delay,
             jitter_buffer_target_delay,
+            jitter_buffer_flushes,
             audio_energy,
-            total_samples_received,
-            concealed_samples,
+            concealed_samples_pct,
             fec_packets_received,
+            relative_arrival_delay_per_packet,
         } = self;
         write!(
             f,
             "{},\
             {ssrc},\
             {packets_per_second:.1},\
-            {packets_lost_pct:.1}%,\
+            {packets_lost_pct:.2}%,\
             {bitrate:.1}bps,\
             {jitter:.0}ms,\
             {audio_energy:.3},\
             {jitter_buffer_delay:.0}ms,\
             {jitter_buffer_target_delay:.0}ms,\
-            {total_samples_received},\
-            {concealed_samples},\
-            {fec_packets_received}",
+            {jitter_buffer_flushes},\
+            {concealed_samples_pct:.2}%,\
+            {fec_packets_received},\
+            {relative_arrival_delay_per_packet:.0}ms",
             Self::LOG_MARKER
         )
     }
@@ -331,9 +348,10 @@ impl AudioReceiverStatsSnapshot {
         audio_energy,\
         jitter_buffer_delay,\
         jitter_buffer_target_delay,\
-        total_samples_received,\
-        concealed_samples,\
-        fec_packets_received";
+        jitter_buffer_flushes,\
+        concealed_samples_pct,\
+        fec_packets_received,\
+        relative_arrival_delay_per_packet";
 
     fn derive(
         curr_stats: &AudioReceiverStatistics,
@@ -342,7 +360,7 @@ impl AudioReceiverStatsSnapshot {
         prev_jitter_buffer_delay: f64,
         prev_jitter_buffer_target_delay: f64,
     ) -> Self {
-        let packets_lost_delta = delta!(curr_stats, prev_stats, packets_lost);
+        let signed_packets_lost_delta = signed_delta!(curr_stats, prev_stats, packets_lost);
         let packets_received_delta = delta!(curr_stats, prev_stats, packets_received);
         let jitter_buffer_delay_delta = delta!(curr_stats, prev_stats, jitter_buffer_delay);
         let jitter_buffer_target_delay_delta =
@@ -353,13 +371,25 @@ impl AudioReceiverStatsSnapshot {
         let audio_energy_delta = delta!(curr_stats, prev_stats, total_audio_energy);
         let total_samples_received_delta = delta!(curr_stats, prev_stats, total_samples_received);
         let concealed_samples_delta = delta!(curr_stats, prev_stats, concealed_samples);
+        let silent_concealed_samples_delta =
+            delta!(curr_stats, prev_stats, silent_concealed_samples);
         let fec_packets_received_delta = delta!(curr_stats, prev_stats, fec_packets_received);
+        let jitter_buffer_flushes_delta = delta!(curr_stats, prev_stats, jitter_buffer_flushes);
+        let packets_discarded_delta = delta!(curr_stats, prev_stats, packets_discarded);
+        let relative_packet_arrival_delay_delta =
+            delta!(curr_stats, prev_stats, relative_packet_arrival_delay);
 
         let packets_per_second =
             compute_packets_per_second(packets_received_delta, seconds_elapsed);
-        let packets_lost = packets_lost_delta.max(0) as u32;
-        let packets_lost_pct =
-            compute_packets_lost_pct(packets_lost, packets_received_delta + packets_lost);
+        let packets_lost_pct = {
+            let numerator = signed_packets_lost_delta + packets_discarded_delta as i32;
+            let denominator = packets_received_delta as i32 + signed_packets_lost_delta;
+            if denominator > 0 {
+                ((numerator as f32 * 100.0) / denominator as f32).max(0.0)
+            } else {
+                0.0
+            }
+        };
         let bitrate = compute_bitrate(bytes_received_delta, seconds_elapsed);
 
         let jitter = 1000.0 * curr_stats.jitter;
@@ -383,10 +413,18 @@ impl AudioReceiverStatsSnapshot {
             jitter,
             jitter_buffer_delay,
             jitter_buffer_target_delay,
+            jitter_buffer_flushes: jitter_buffer_flushes_delta,
             audio_energy: audio_energy_delta,
-            total_samples_received: total_samples_received_delta,
-            concealed_samples: concealed_samples_delta,
+            concealed_samples_pct: (concealed_samples_delta
+                .saturating_sub(silent_concealed_samples_delta)
+                as f32
+                * 100.0)
+                .naive_checked_div(total_samples_received_delta as f32)
+                .unwrap_or(0.0),
             fec_packets_received: fec_packets_received_delta,
+            relative_arrival_delay_per_packet: (1000.0 * relative_packet_arrival_delay_delta)
+                .naive_checked_div(packets_received_delta as f64)
+                .unwrap_or(0.0),
         }
     }
 }
@@ -1210,7 +1248,10 @@ pub struct AudioReceiverStatistics {
     pub estimated_playout_timestamp: f64,
     pub total_samples_received: u64,
     pub concealed_samples: u64,
+    pub silent_concealed_samples: u64,
     pub fec_packets_received: u64,
+    pub packets_discarded: u64,
+    pub relative_packet_arrival_delay: f64,
 }
 
 #[repr(C)]

@@ -35,8 +35,7 @@ pub enum ChartDimension {
     AudioReceiveAudioEnergy,
     AudioReceiveJitterBufferDelay,
     AudioReceiveJitterBufferTargetDelay,
-    AudioReceiveTotalSamplesReceived,
-    AudioReceiveConcealedSamples,
+    AudioReceiveConcealedSamplesPct,
     AudioReceiveFecPacketsReceived,
 
     VideoSendPacketsPerSecond,
@@ -93,11 +92,8 @@ impl ChartDimension {
             ChartDimension::AudioReceiveJitterBufferTargetDelay => {
                 ("Audio Received Jitter Buffer Target Delay", "milliseconds")
             }
-            ChartDimension::AudioReceiveTotalSamplesReceived => {
-                ("Audio Received Total Samples", "Samples")
-            }
-            ChartDimension::AudioReceiveConcealedSamples => {
-                ("Audio Received Concealed Samples", "Samples")
+            ChartDimension::AudioReceiveConcealedSamplesPct => {
+                ("Audio Received Concealed Samples", "%")
             }
             ChartDimension::AudioReceiveFecPacketsReceived => {
                 ("Audio Received FEC Packets", "Packets")
@@ -157,10 +153,9 @@ impl ChartDimension {
             ChartDimension::AudioReceiveJitterBufferTargetDelay => {
                 "audio_receive_jitter_buffer_target_delay"
             }
-            ChartDimension::AudioReceiveTotalSamplesReceived => {
-                "audio_receive_total_samples_received"
+            ChartDimension::AudioReceiveConcealedSamplesPct => {
+                "audio_receive_concealed_samples_pct"
             }
-            ChartDimension::AudioReceiveConcealedSamples => "audio_receive_concealed_samples",
             ChartDimension::AudioReceiveFecPacketsReceived => "audio_receive_fec_packets_received",
             ChartDimension::VideoSendPacketsPerSecond => "video_send_pps",
             ChartDimension::VideoSendPacketSize => "video_send_packet_size",

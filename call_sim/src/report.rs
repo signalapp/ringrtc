@@ -469,9 +469,10 @@ pub struct AudioReceiveStatsTransfer {
     pub audio_energy: StatsData,
     pub jitter_buffer_delay: StatsData,
     pub jitter_buffer_target_delay: StatsData,
-    pub total_samples_received: StatsData,
-    pub concealed_samples: StatsData,
+    pub jitter_buffer_flushes: StatsData,
+    pub concealed_samples_pct: StatsData,
     pub fec_packets_received: StatsData,
+    pub relative_arrival_delay_per_packet: StatsData,
 }
 
 #[derive(Debug, Default)]
@@ -538,9 +539,10 @@ pub struct AudioReceiveStats {
     pub audio_energy_stats: Stats,
     pub jitter_buffer_delay_stats: Stats,
     pub jitter_buffer_target_delay_stats: Stats,
-    pub total_samples_received_stats: Stats,
-    pub concealed_samples_stats: Stats,
+    pub jitter_buffer_flushes_stats: Stats,
+    pub concealed_samples_pct_stats: Stats,
     pub fec_packets_received_stats: Stats,
+    pub relative_arrival_delay_per_packet_stats: Stats,
 }
 
 #[derive(Debug, Default)]
@@ -600,9 +602,9 @@ impl ClientLogReport {
             r".*ringrtc_stats!,video,send,(?P<ssrc>\d+),(?P<packets_per_second>[-+]?[0-9]*\.?[0-9]+),(?P<average_packet_size>[-+]?[0-9]*\.?[0-9]+),(?P<bitrate>[-+]?[0-9]*\.?[0-9]+)bps,(?P<framerate>[0-9]*\.?[0-9]+)fps,(?P<key_frames_encoded>\d+),(?P<encode_time_per_frame>[0-9]*\.?[0-9]+)ms,(?P<resolution>\d+x\d+),(?P<retransmitted_packets_sent>\d+),(?P<retransmitted_bitrate>[0-9]*\.?[0-9]+)bps,(?P<send_delay_per_packet>[0-9]*\.?[0-9]+)ms,(?P<nack_count>\d+),(?P<pli_count>\d+),(?P<quality_limitation_reason>\w+),(?P<quality_limitation_resolution_changes>\d+),(?P<remote_packet_loss>[-+]?[0-9]*\.?[0-9]+)%,(?P<remote_jitter>[0-9]*\.?[0-9]+)ms,(?P<remote_round_trip_time>[0-9]*\.?[0-9]+)ms",
         )?;
 
-        // Example: ringrtc_stats!,audio,recv,1002,40.0,0.0%,32000.0bps,0ms,0.000,50ms,40ms,48000,0,0
+        // Example: ringrtc_stats!,audio,recv,1002,40.0,0.00%,32000.0bps,0ms,0.000,50ms,40ms,0,0.00%,0,0ms
         let re_audio_receive_line = Regex::new(
-            r".*ringrtc_stats!,audio,recv,(?P<ssrc>\d+),(?P<packets_per_second>[-+]?[0-9]*\.?[0-9]+),(?P<packet_loss>[-+]?[0-9]*\.?[0-9]+)%,(?P<bitrate>[-+]?[0-9]*\.?[0-9]+)bps,(?P<jitter>\d+)ms,(?P<audio_energy>[-+]?[0-9]*\.?[0-9]+),(?P<jitter_buffer_delay>\d+)ms,(?P<jitter_buffer_target_delay>\d+)ms,(?P<total_samples_received>\d+),(?P<concealed_samples>\d+),(?P<fec_packets_received>\d+)",
+            r".*ringrtc_stats!,audio,recv,(?P<ssrc>\d+),(?P<packets_per_second>[-+]?[0-9]*\.?[0-9]+),(?P<packet_loss>[-+]?[0-9]*\.?[0-9]+)%,(?P<bitrate>[-+]?[0-9]*\.?[0-9]+)bps,(?P<jitter>\d+)ms,(?P<audio_energy>[-+]?[0-9]*\.?[0-9]+),(?P<jitter_buffer_delay>\d+)ms,(?P<jitter_buffer_target_delay>\d+)ms,(?P<jitter_buffer_flushes>\d+),(?P<concealed_samples_pct>[-+]?[0-9]*\.?[0-9]+)%,(?P<fec_packets_received>\d+),(?P<relative_arrival_delay_per_packet>\d+)ms",
         )?;
 
         // Example: ringrtc_stats!,video,recv,2003,7.0,0.0%,61305bps,1.0fps,1,3.3ms,1280x720
@@ -748,14 +750,17 @@ impl ClientLogReport {
                     .jitter_buffer_target_delay
                     .push(f32::from_str(&cap["jitter_buffer_target_delay"])?);
                 audio_receive_stats
-                    .total_samples_received
-                    .push(f32::from_str(&cap["total_samples_received"])?);
+                    .jitter_buffer_flushes
+                    .push(f32::from_str(&cap["jitter_buffer_flushes"])?);
                 audio_receive_stats
-                    .concealed_samples
-                    .push(f32::from_str(&cap["concealed_samples"])?);
+                    .concealed_samples_pct
+                    .push(f32::from_str(&cap["concealed_samples_pct"])?);
                 audio_receive_stats
                     .fec_packets_received
                     .push(f32::from_str(&cap["fec_packets_received"])?);
+                audio_receive_stats
+                    .relative_arrival_delay_per_packet
+                    .push(f32::from_str(&cap["relative_arrival_delay_per_packet"])?);
                 continue;
             }
 
@@ -1209,31 +1214,33 @@ impl ClientLogReport {
                 data: audio_receive_stats.jitter_buffer_target_delay,
             };
 
-            let total_samples_received_stats = Stats {
+            let jitter_buffer_flushes_stats = Stats {
                 config: StatsConfig {
-                    title: format!("Audio Receive Total Samples Received (ssrc={ssrc})"),
+                    title: format!("Audio Receive Jitter Buffer Flushes (ssrc={ssrc})"),
                     chart_name: format!(
-                        "{}.log.audio.receive.total_samples_received.svg",
+                        "{}.log.audio.receive.jitter_buffer_flushes.svg",
                         client_name
                     ),
                     x_label: "Test Seconds".to_string(),
-                    y_label: "Samples".to_string(),
+                    y_label: "Flushes".to_string(),
                     show_total: true,
                     ..Default::default()
                 },
-                data: audio_receive_stats.total_samples_received,
+                data: audio_receive_stats.jitter_buffer_flushes,
             };
 
-            let concealed_samples_stats = Stats {
+            let concealed_samples_pct_stats = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Concealed Samples (ssrc={ssrc})"),
-                    chart_name: format!("{}.log.audio.receive.concealed_samples.svg", client_name),
+                    chart_name: format!(
+                        "{}.log.audio.receive.concealed_samples_pct.svg",
+                        client_name
+                    ),
                     x_label: "Test Seconds".to_string(),
-                    y_label: "Samples".to_string(),
-                    show_total: true,
+                    y_label: "%".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.concealed_samples,
+                data: audio_receive_stats.concealed_samples_pct,
             };
 
             let fec_packets_received_stats = Stats {
@@ -1251,6 +1258,20 @@ impl ClientLogReport {
                 data: audio_receive_stats.fec_packets_received,
             };
 
+            let relative_arrival_delay_per_packet_stats = Stats {
+                config: StatsConfig {
+                    title: format!("Audio Receive Relative Arrival Delay Per Packet (ssrc={ssrc})"),
+                    chart_name: format!(
+                        "{}.log.audio.receive.relative_arrival_delay_per_packet.svg",
+                        client_name
+                    ),
+                    x_label: "Test Seconds".to_string(),
+                    y_label: "milliseconds".to_string(),
+                    ..Default::default()
+                },
+                data: audio_receive_stats.relative_arrival_delay_per_packet,
+            };
+
             audio_receive_stats_list.push(AudioReceiveStats {
                 ssrc: audio_receive_stats.ssrc,
                 packets_per_second_stats,
@@ -1260,9 +1281,10 @@ impl ClientLogReport {
                 audio_energy_stats,
                 jitter_buffer_delay_stats,
                 jitter_buffer_target_delay_stats,
-                total_samples_received_stats,
-                concealed_samples_stats,
+                jitter_buffer_flushes_stats,
+                concealed_samples_pct_stats,
                 fec_packets_received_stats,
+                relative_arrival_delay_per_packet_stats,
             });
         }
 
@@ -1645,9 +1667,10 @@ impl Report {
                 &per_ssrc.audio_energy_stats,
                 &per_ssrc.jitter_buffer_delay_stats,
                 &per_ssrc.jitter_buffer_target_delay_stats,
-                &per_ssrc.total_samples_received_stats,
-                &per_ssrc.concealed_samples_stats,
+                &per_ssrc.jitter_buffer_flushes_stats,
+                &per_ssrc.concealed_samples_pct_stats,
                 &per_ssrc.fec_packets_received_stats,
+                &per_ssrc.relative_arrival_delay_per_packet_stats,
             ]
         }));
 
@@ -1901,10 +1924,11 @@ impl Report {
                     &audio_receive_stats.jitter_stats,
                     &audio_receive_stats.jitter_buffer_delay_stats,
                     &audio_receive_stats.jitter_buffer_target_delay_stats,
+                    &audio_receive_stats.jitter_buffer_flushes_stats,
                     &audio_receive_stats.audio_energy_stats,
-                    &audio_receive_stats.total_samples_received_stats,
-                    &audio_receive_stats.concealed_samples_stats,
+                    &audio_receive_stats.concealed_samples_pct_stats,
                     &audio_receive_stats.fec_packets_received_stats,
+                    &audio_receive_stats.relative_arrival_delay_per_packet_stats,
                 ],
             );
             buf.extend_from_slice(
@@ -2169,20 +2193,12 @@ impl Report {
                     .map(|stats| stats.jitter_buffer_target_delay_stats.data.ave)
                     .collect_vec(),
             ),
-            ChartDimension::AudioReceiveTotalSamplesReceived => average(
+            ChartDimension::AudioReceiveConcealedSamplesPct => average(
                 &report
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.total_samples_received_stats.data.ave)
-                    .collect_vec(),
-            ),
-            ChartDimension::AudioReceiveConcealedSamples => average(
-                &report
-                    .client_log_report
-                    .audio_receive_stats_list
-                    .iter()
-                    .map(|stats| stats.concealed_samples_stats.data.ave)
+                    .map(|stats| stats.concealed_samples_pct_stats.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceiveFecPacketsReceived => average(
@@ -2536,7 +2552,6 @@ struct SummaryRow {
     pub audio_receive_packet_rate: f32,
     pub audio_receive_bitrate: f32,
     pub audio_receive_loss: f32,
-    pub concealed_samples_total: f32,
     pub concealed_samples_pct: f32,
     pub fec_packets_received_total: f32,
 
@@ -2569,28 +2584,21 @@ impl SummaryRow {
             audio_receive_packet_rate,
             audio_receive_bitrate,
             audio_receive_loss,
-            concealed_samples_total,
-            total_samples_received_total,
+            concealed_samples_pct,
             fec_packets_received_total,
         ) = report
             .client_log_report
             .audio_receive_stats_list
             .iter()
-            .fold((0.0, 0.0, 0.0, 0.0, 0.0, 0.0), |acc, stats| {
+            .fold((0.0, 0.0, 0.0, 0.0, 0.0), |acc, stats| {
                 (
                     acc.0 + stats.packets_per_second_stats.data.ave,
                     acc.1 + stats.bitrate_stats.data.ave,
                     acc.2 + stats.packet_loss_stats.data.ave,
-                    acc.3 + stats.concealed_samples_stats.data.total,
-                    acc.4 + stats.total_samples_received_stats.data.total,
-                    acc.5 + stats.fec_packets_received_stats.data.total,
+                    acc.3 + stats.concealed_samples_pct_stats.data.ave,
+                    acc.4 + stats.fec_packets_received_stats.data.total,
                 )
             });
-        let concealed_samples_pct = if total_samples_received_total > 0.0 {
-            100.0 * concealed_samples_total / total_samples_received_total
-        } else {
-            0.0
-        };
         Self {
             audio_send_packet_size: report
                 .client_log_report
@@ -2613,8 +2621,7 @@ impl SummaryRow {
             audio_receive_packet_rate,
             audio_receive_bitrate,
             audio_receive_loss,
-            concealed_samples_total: concealed_samples_total as f32,
-            concealed_samples_pct: concealed_samples_pct as f32,
+            concealed_samples_pct,
             fec_packets_received_total: fec_packets_received_total as f32,
             container_cpu: report.docker_stats_report.cpu_usage.data.ave,
             container_memory: report.docker_stats_report.mem_usage.data.ave,
@@ -2644,22 +2651,30 @@ impl SummaryRow {
             vmaf: report.analysis_report.as_ref().and_then(|ar| ar.vmaf),
             row_type: SummaryRowType::Single,
             row_index: 0,
-            video_send_resolution: report.client_log_report.video_send_stats[0]
-                .resolution
-                .data
-                .ave,
-            video_send_framerate: report.client_log_report.video_send_stats[0]
-                .framerate_stats
-                .data
-                .ave,
-            video_recv_resolution: report.client_log_report.video_receive_stats_list[0]
-                .resolution
-                .data
-                .ave,
-            video_recv_framerate: report.client_log_report.video_receive_stats_list[0]
-                .framerate_stats
-                .data
-                .ave,
+            video_send_resolution: report
+                .client_log_report
+                .video_send_stats
+                .first()
+                .map(|s| s.resolution.data.ave)
+                .unwrap_or(0.0),
+            video_send_framerate: report
+                .client_log_report
+                .video_send_stats
+                .first()
+                .map(|s| s.framerate_stats.data.ave)
+                .unwrap_or(0.0),
+            video_recv_resolution: report
+                .client_log_report
+                .video_receive_stats_list
+                .first()
+                .map(|s| s.resolution.data.ave)
+                .unwrap_or(0.0),
+            video_recv_framerate: report
+                .client_log_report
+                .video_receive_stats_list
+                .first()
+                .map(|s| s.framerate_stats.data.ave)
+                .unwrap_or(0.0),
         }
     }
 
@@ -2693,8 +2708,6 @@ impl SummaryRow {
             self.audio_receive_bitrate =
                 new_average(self.audio_receive_bitrate, new.audio_receive_bitrate);
             self.audio_receive_loss = new_average(self.audio_receive_loss, new.audio_receive_loss);
-            self.concealed_samples_total =
-                new_average(self.concealed_samples_total, new.concealed_samples_total);
             self.concealed_samples_pct =
                 new_average(self.concealed_samples_pct, new.concealed_samples_pct);
             self.fec_packets_received_total = new_average(
@@ -3333,17 +3346,19 @@ impl Html {
                 indent, summary_row.audio_send_bitrate
             );
 
-            let _ = writeln!(
-                buf,
-                "<td>{}{:.2}</td>",
-                indent, summary_row.video_send_resolution
-            );
+            if group_config.summary_report_columns.show_video {
+                let _ = writeln!(
+                    buf,
+                    "<td>{}{:.2}</td>",
+                    indent, summary_row.video_send_resolution
+                );
 
-            let _ = writeln!(
-                buf,
-                "<td>{}{:.2}</td>",
-                indent, summary_row.video_send_framerate
-            );
+                let _ = writeln!(
+                    buf,
+                    "<td>{}{:.2}</td>",
+                    indent, summary_row.video_send_framerate
+                );
+            }
         }
 
         if group_config.summary_report_columns.show_receive_stats {
@@ -3363,17 +3378,19 @@ impl Html {
                 indent, summary_row.audio_receive_loss
             );
 
-            let _ = writeln!(
-                buf,
-                "<td>{}{:.2}</td>",
-                indent, summary_row.video_recv_resolution
-            );
+            if group_config.summary_report_columns.show_video {
+                let _ = writeln!(
+                    buf,
+                    "<td>{}{:.2}</td>",
+                    indent, summary_row.video_recv_resolution
+                );
 
-            let _ = writeln!(
-                buf,
-                "<td>{}{:.2}</td>",
-                indent, summary_row.video_recv_framerate
-            );
+                let _ = writeln!(
+                    buf,
+                    "<td>{}{:.2}</td>",
+                    indent, summary_row.video_recv_framerate
+                );
+            }
         }
 
         if group_config.summary_report_columns.show_receive_stats
@@ -3381,12 +3398,7 @@ impl Html {
         {
             let _ = writeln!(
                 buf,
-                "<td>{}{:.0}</td>",
-                indent, summary_row.concealed_samples_total
-            );
-            let _ = writeln!(
-                buf,
-                "<td>{}{:.3}%</td>",
+                "<td>{}{:.2}</td>",
                 indent, summary_row.concealed_samples_pct
             );
             let _ = writeln!(
@@ -3489,13 +3501,25 @@ impl Html {
             buf.push_str("<th colspan=\"3\" style=\"width: 33%\">Test Case</th>\n");
         }
         if group_config.summary_report_columns.show_send_stats {
-            buf.push_str("<th colspan=\"5\">Client Send Stats (average)</th>\n");
+            let send_colspan = if group_config.summary_report_columns.show_video {
+                5
+            } else {
+                3
+            };
+            let _ = writeln!(
+                buf,
+                "<th colspan=\"{send_colspan}\">Client Send Stats (average)</th>"
+            );
         }
         if group_config.summary_report_columns.show_receive_stats {
-            let recv_colspan = if group_config.summary_report_columns.show_dred_stats {
-                8
-            } else {
-                5
+            let recv_colspan = match (
+                group_config.summary_report_columns.show_video,
+                group_config.summary_report_columns.show_dred_stats,
+            ) {
+                (true, true) => 7,
+                (true, false) => 5,
+                (false, true) => 5,
+                (false, false) => 3,
             };
             let _ = writeln!(
                 buf,
@@ -3547,18 +3571,21 @@ impl Html {
             buf.push_str("<th>Packet Size</th>\n");
             buf.push_str("<th>Packet Rate</th>\n");
             buf.push_str("<th>Bitrate</th>\n");
-            buf.push_str("<th>Resolution</th>\n");
-            buf.push_str("<th>Framerate</th>\n");
+            if group_config.summary_report_columns.show_video {
+                buf.push_str("<th>Resolution</th>\n");
+                buf.push_str("<th>Framerate</th>\n");
+            }
         }
         if group_config.summary_report_columns.show_receive_stats {
             buf.push_str("<th>Packet Rate</th>\n");
             buf.push_str("<th>Bitrate</th>\n");
             buf.push_str("<th>Loss</th>\n");
-            buf.push_str("<th>Resolution</th>\n");
-            buf.push_str("<th>Framerate</th>\n");
+            if group_config.summary_report_columns.show_video {
+                buf.push_str("<th>Resolution</th>\n");
+                buf.push_str("<th>Framerate</th>\n");
+            }
             if group_config.summary_report_columns.show_dred_stats {
                 buf.push_str("<th>Concealed</th>\n");
-                buf.push_str("<th>Concealed %</th>\n");
                 buf.push_str("<th>FEC</th>\n");
             }
         }

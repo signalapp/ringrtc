@@ -5,7 +5,7 @@
 
 use std::{
     collections::{HashMap, VecDeque},
-    fmt::Debug,
+    fmt::{self, Debug, Display},
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
     sync::{Arc, MutexGuard},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -13,6 +13,7 @@ use std::{
 
 use anyhow::anyhow;
 use prost::Message;
+use serde_json::json;
 use sketches_ddsketch::{Config, DDSketch};
 
 use crate::{
@@ -103,6 +104,64 @@ impl Timestamp {
         time.duration_since(UNIX_EPOCH)
             .map(|v| Self(v.as_millis() as u64))
             .ok()
+    }
+}
+
+impl Display for CallSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let call_id_hash_hex = self.call_id_hash.as_ref().map(|hash| {
+            hash.iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>()
+        });
+
+        let raw_stats_text_json = self.raw_stats_text.as_ref().and_then(|text| {
+            match serde_json::from_str::<serde_json::Value>(text) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    error!("Failed to parse raw_stats_text as JSON: {}", e);
+                    None
+                }
+            }
+        });
+
+        let summary_json = json!({
+            "CallSummary": {
+                "call_id_hash": call_id_hash_hex,
+                "start_time": u64::from(self.start_time),
+                "end_time": u64::from(self.end_time),
+                "is_survey_candidate": self.is_survey_candidate,
+                "call_end_reason_text": &self.call_end_reason_text,
+                "quality_stats": {
+                    "rtt_median_connection": self.quality_stats.rtt_median_connection,
+                    "audio_stats": {
+                        "rtt_median": self.quality_stats.audio_stats.rtt_median,
+                        "jitter_median_send": self.quality_stats.audio_stats.jitter_median_send,
+                        "jitter_median_recv": self.quality_stats.audio_stats.jitter_median_recv,
+                        "packet_loss_fraction_send": self.quality_stats.audio_stats.packet_loss_fraction_send,
+                        "packet_loss_fraction_recv": self.quality_stats.audio_stats.packet_loss_fraction_recv
+                    },
+                    "video_stats": {
+                        "rtt_median": self.quality_stats.video_stats.rtt_median,
+                        "jitter_median_send": self.quality_stats.video_stats.jitter_median_send,
+                        "jitter_median_recv": self.quality_stats.video_stats.jitter_median_recv,
+                        "packet_loss_fraction_send": self.quality_stats.video_stats.packet_loss_fraction_send,
+                        "packet_loss_fraction_recv": self.quality_stats.video_stats.packet_loss_fraction_recv
+                    }
+                },
+                // Just showing the length for the blob rather than a byte array.
+                "raw_stats": self.raw_stats.as_ref().map(|blob| blob.len()),
+                // We show the telemetry/stats blob json string inline.
+                "raw_stats_text": raw_stats_text_json,
+            }
+        });
+
+        let summary = serde_json::to_string_pretty(&summary_json).map_err(|e| {
+            error!("Failed to serialize CallSummary JSON: {}", e);
+            fmt::Error
+        })?;
+
+        f.write_str(&summary)
     }
 }
 
@@ -217,9 +276,10 @@ struct StreamSummary {
     video_codec: StatsVideoCodecType,
     codec_implementation: Option<String>,
     // The most recent audio receive stream redundancy statistics.
-    audio_samples_received: Option<u64>,
-    audio_samples_concealed: Option<u64>,
+    audio_concealed_samples: DistributionSummary<f32>,
     audio_redundant_packets: Option<u64>,
+    audio_jitter_buffer_flushes: Option<u64>,
+    audio_relative_arrival_delay: DistributionSummary<f32>,
 }
 
 /// `StreamSummaries` is converted into `protobuf::call_summary::StreamSummaries`
@@ -550,12 +610,10 @@ impl From<(&u32, &StreamSummary)> for protobuf::call_summary::StreamSummary {
             },
             codec_implementation: summary.codec_implementation.clone(),
             ssrc: Some(*ssrc),
-            audio_concealment_pct: summary
-                .audio_samples_received
-                .zip(summary.audio_samples_concealed)
-                .filter(|(received, _)| *received > 0)
-                .map(|(received, concealed)| (concealed as f32 / received as f32) * 100.0),
+            audio_concealment_pct: summary.audio_concealed_samples.to_proto(),
             audio_redundant_packets: summary.audio_redundant_packets,
+            audio_jitter_buffer_flushes: summary.audio_jitter_buffer_flushes,
+            audio_relative_arrival_delay: summary.audio_relative_arrival_delay.to_proto(),
         }
     }
 }
@@ -756,12 +814,16 @@ impl CallInfo {
                         summary.bitrate.push(snapshot.bitrate);
                         summary.packet_loss.push(snapshot.packets_lost_pct);
                         summary.jitter.push(snapshot.jitter as f32);
-                        *summary.audio_samples_received.get_or_insert(0) +=
-                            snapshot.total_samples_received;
-                        *summary.audio_samples_concealed.get_or_insert(0) +=
-                            snapshot.concealed_samples;
+                        summary
+                            .audio_concealed_samples
+                            .push(snapshot.concealed_samples_pct);
                         *summary.audio_redundant_packets.get_or_insert(0) +=
                             snapshot.fec_packets_received;
+                        *summary.audio_jitter_buffer_flushes.get_or_insert(0) +=
+                            snapshot.jitter_buffer_flushes;
+                        summary
+                            .audio_relative_arrival_delay
+                            .push(snapshot.relative_arrival_delay_per_packet as f32);
                     });
                 self.stats_sets
                     .push_audio_recv_stream_stats(snapshot.into());
@@ -1489,10 +1551,18 @@ mod test {
                 }),
                 freeze_count: None,
                 video_codec: None,
-                codec_implementation: None,
                 ssrc: Some(v),
-                audio_concealment_pct: None,
+                codec_implementation: None,
+                audio_concealment_pct: Some(protobuf::call_summary::DistributionSummary {
+                    mean: Some(100.0),
+                    std_dev: Some(0.0),
+                    min_val: Some(100.0),
+                    max_val: Some(100.0),
+                    sample_count: Some(50000),
+                }),
                 audio_redundant_packets: None,
+                audio_jitter_buffer_flushes: None,
+                audio_relative_arrival_delay: None,
             })
             .collect::<Vec<protobuf::call_summary::StreamSummary>>()
     }
