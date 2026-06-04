@@ -772,6 +772,10 @@ pub struct RemoteDeviceState {
     pub server_allocated_height: u16,
     pub client_decoded_height: Option<u32>,
     pub is_higher_resolution_pending: bool,
+    // The DemuxIds that we have observed sending a remote mute request to |demux_id|.
+    // Before running a handle_observed_remote_mute callback, verify that we actually saw
+    // the relevant mute request.
+    pub remote_mute_requesters: HashSet<DemuxId>,
 }
 
 fn as_unix_millis(t: Option<SystemTime>) -> u64 {
@@ -802,6 +806,7 @@ impl RemoteDeviceState {
             server_allocated_height: 0,
             client_decoded_height: None,
             is_higher_resolution_pending: false,
+            remote_mute_requesters: HashSet::new(),
         }
     }
 
@@ -2217,6 +2222,13 @@ impl Client {
                     if our_demux_id == target {
                         error!("Refusing to send remote mute request to self");
                         return;
+                    }
+                    if let Some(remote_state) = state.remote_devices.find_by_demux_id_mut(target)
+                        && !remote_state.heartbeat_state.audio_muted.unwrap_or(true)
+                    {
+                        // if this might have muted them, note that we "saw" the request
+                        // (even though we're the sender)
+                        remote_state.remote_mute_requesters.insert(our_demux_id);
                     }
                 }
                 _ => {}
@@ -4782,6 +4794,13 @@ impl Client {
                             remote_device.recalculate_higher_resolution_pending();
                         }
 
+                        // On unmutes, clear set of seen mute requests
+                        if heartbeat_state.audio_muted == Some(false)
+                            && remote_device.heartbeat_state.audio_muted != Some(false)
+                        {
+                            remote_device.remote_mute_requesters.clear();
+                        }
+
                         // Ignore heartbeats that do not have changes in the state.
                         let new_source = if heartbeat_state.muted_by_demux_id
                             != remote_device.heartbeat_state.muted_by_demux_id
@@ -4794,6 +4813,9 @@ impl Client {
                         if let Some(new_source_demux_id) = new_source
                             && heartbeat_state.audio_muted == Some(true)
                             && remote_device.heartbeat_state.audio_muted == Some(false)
+                            && remote_device
+                                .remote_mute_requesters
+                                .contains(&new_source_demux_id)
                         {
                             state.observer.handle_observed_remote_mute(
                                 state.client_id,
@@ -4899,12 +4921,16 @@ impl Client {
 
         self.actor.send(move |state| match state.join_state {
             JoinState::Pending(our_demux_id) | JoinState::Joined(our_demux_id) => {
-                if our_demux_id == target
-                    && state.mute_request.is_none()
-                    && source_demux_id != our_demux_id
+                if our_demux_id == target {
+                    if state.mute_request.is_none() && source_demux_id != our_demux_id {
+                        // Only bother with the first mute request in a tick; more would be redundant.
+                        state.mute_request = Some(source_demux_id);
+                    }
+                } else if let Some(remote_state) = state.remote_devices.find_by_demux_id_mut(target)
+                    && !remote_state.heartbeat_state.audio_muted.unwrap_or(false)
                 {
-                    // Only bother with the first mute request in a tick; more would be redundant.
-                    state.mute_request = Some(source_demux_id);
+                    // if this might have muted them, note that we saw the request
+                    remote_state.remote_mute_requesters.insert(source_demux_id);
                 }
             }
             _ => {}
@@ -7111,12 +7137,51 @@ mod tests {
         assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
         assert_eq!(None, remote_devices2[0].heartbeat_state.muted_by_demux_id);
 
-        // Unmuted before the request, so should mute and attribute it to the
-        // remote request.
+        // Unmuted before the request, so should mute
         client1.client.set_outgoing_audio_muted(false);
         client1.wait_for_client_to_process();
         client2.wait_for_client_to_process();
 
+        // Claims remote muted by client2, but no such request was seen
+        client1
+            .client
+            .set_outgoing_audio_muted_remotely(client2.demux_id);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        let remote_devices2 = client2.observer.remote_devices();
+        assert_eq!(1, remote_devices2.len());
+        assert_eq!(client1.demux_id, remote_devices2[0].demux_id);
+        // Should be muted now!
+        assert_eq!(Some(true), remote_devices2[0].heartbeat_state.audio_muted);
+        // Should attribute the mute correctly.
+        assert_eq!(
+            Some(client2.demux_id),
+            remote_devices2[0].heartbeat_state.muted_by_demux_id
+        );
+
+        let client2_observed_mutes = client2
+            .observer
+            .observed_remote_mutes
+            .lock()
+            .unwrap()
+            .clone();
+        // should ignore this, because there was no remote mute request observed
+        assert!(client2_observed_mutes.is_empty());
+
+        // Unmuted before the request, so should mute
+        client1.client.set_outgoing_audio_muted(false);
+        client1.wait_for_client_to_process();
+        client2.wait_for_client_to_process();
+
+        // Cause client2 to observe a remote mute request
+        client2.client.handle_remote_mute_request(
+            client2.demux_id,
+            protobuf::group_call::RemoteMuteRequest {
+                target_demux_id: Some(client1.demux_id),
+            },
+        );
+        client2.wait_for_client_to_process();
         client1
             .client
             .set_outgoing_audio_muted_remotely(client2.demux_id);
