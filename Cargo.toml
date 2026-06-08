@@ -6,16 +6,16 @@
 [workspace]
 resolver = "2"
 members = [
-    "call_sim",
-    "mrp",
-    "protobuf",
-    "src/rust",
-    "webrtc-sys",
-    "webrtc-sys/build",
+  "call_sim",
+  "mrp",
+  "protobuf",
+  "src/rust",
+  "webrtc-sys",
+  "webrtc-sys/build",
 ]
 
 [workspace.package]
-version = "2.69.2"
+version = "2.69.3"
 authors = ["Calling Team <callingteam@signal.org>"]
 
 [patch.crates-io]

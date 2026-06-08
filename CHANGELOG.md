@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.69.3
+
+- Improve remote mute attribution checks
+
+- Improve stats for packet loss analysis
+
+- Handle badly formatted video frames better
+
+- Update WebRTC version to 7778c
+  - Add stats for improved packet loss analysis
+  - Fix relative arrival delay stat when DRED is enabled
+  - Add checks for DRED buffer operations
+  - Add null checks when rotating i420 video frames
+
+- Desktop: Update NodeJS dependencies
+
+- Add resolution and framerate to call_sim summary
+
+- Update media key rotation delay to 5 seconds in group calls.
+
 ## v2.69.2
 
 - Android: Update to jni 0.22.4 and gradle 9.3.1
