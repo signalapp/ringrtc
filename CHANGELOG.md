@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.69.4
+
+- Update to cubeb 0.35.3
+
 ## v2.69.3
 
 - Improve remote mute attribution checks
