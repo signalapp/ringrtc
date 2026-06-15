@@ -231,15 +231,23 @@ fn redact_ipv4(text: Cow<'_, str>) -> Cow<'_, str> {
     replace_all(text, re, "[REDACTED ipv4]")
 }
 
+#[cfg(any(not(debug_assertions), test))]
+fn redact_foundation(text: Cow<'_, str>) -> Cow<'_, str> {
+    let re = regex_aot::regex!("candidate:[0-9]+");
+    replace_all(text, re, "candidate:******")
+}
+
 /// Scrubs off sensitive information from the string for public
 /// logging purposes, including:
 /// - ICE passwords
 /// - IPv4 and IPv6 addresses
+/// - ICE candidate foundations
 #[cfg(not(debug_assertions))]
 pub fn redact_string<'a>(text: impl Into<Cow<'a, str>>) -> Cow<'a, str> {
     let mut string = redact_ice_password(text.into());
     string = redact_ipv6(string);
-    redact_ipv4(string)
+    string = redact_ipv4(string);
+    redact_foundation(string)
 }
 
 /// For debug builds, redacting won't do anything.
@@ -482,6 +490,16 @@ mod tests {
         let result = redact_ice_password(test_str.into());
         assert_eq!(
             "abc\na=ice-pwd:[ REDACTED ]\ndef\na=ice-pwd:[ REDACTED ]\nghi",
+            result,
+        );
+    }
+
+    #[test]
+    fn check_foundation() {
+        let test_str = "candidate:123456789 1 udp 2122270975 92.168.122.250 12345 typ host generation 0 ufrag abcd network-id 5 network-cost 900";
+        let result = redact_foundation(test_str.into());
+        assert_eq!(
+            "candidate:****** 1 udp 2122270975 92.168.122.250 12345 typ host generation 0 ufrag abcd network-id 5 network-cost 900",
             result,
         );
     }
