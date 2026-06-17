@@ -9,7 +9,7 @@ jobs:
     name: Code Formatting
     runs-on: ubuntu-latest-4-cores
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - run: rustup toolchain install nightly --profile minimal --component rustfmt
     - name: Check rust format
       run: cargo +nightly fmt -- --check
@@ -28,9 +28,9 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
     - name: Install Python tools
       run: pip3 install flake8 mypy
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Cargo Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       with:
         cache-targets: "false"
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
@@ -96,7 +96,7 @@ jobs:
     steps:
     - name: Install deps
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - name: Run rust tests
       run: cd src/rust && ./scripts/run-tests
@@ -119,13 +119,13 @@ jobs:
         elif [[ "${{ matrix.os }}" == ubuntu-* ]]; then
           sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
         fi
-    - name: Install Protoc for Windows
-      uses: arduino/setup-protoc@v3
-      if: ${{ startsWith(matrix.os, 'windows-') }}
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/checkout@v6
+    - uses: actions/setup-node@v6
       with:
         node-version-file: 'src/node/.nvmrc'
+    - name: Install Protoc for Windows
+      uses: ./.github/actions/install-protoc
+      if: ${{ startsWith(matrix.os, 'windows-') }}
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - run: bin/fetch-artifact -p desktop
     - run: bin/build-desktop --release --ringrtc-only --test-ringrtc-adm
@@ -161,13 +161,13 @@ jobs:
         elif [[ "${{ matrix.os }}" == ubuntu-* ]]; then
           sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
         fi
-    - name: Install Protoc for Windows
-      uses: arduino/setup-protoc@v3
-      if: ${{ startsWith(matrix.os, 'windows-') }}
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/checkout@v6
+    - uses: actions/setup-node@v6
       with:
         node-version-file: 'src/node/.nvmrc'
+    - name: Install Protoc for Windows
+      uses: ./.github/actions/install-protoc
+      if: ${{ startsWith(matrix.os, 'windows-') }}
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
     - run: cargo build -p ringrtc --features prebuilt_webrtc
 
@@ -177,10 +177,10 @@ jobs:
     steps:
     - name: Install protoc
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
     - name: set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: temurin
         java-version: 17
@@ -191,7 +191,7 @@ jobs:
     name: iOS Tests
     runs-on: macos-latest-xlarge
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - run: brew install protobuf coreutils # for grealpath
     - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-apple-ios-sim
     - run: cargo install cbindgen

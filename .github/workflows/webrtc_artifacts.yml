@@ -23,7 +23,7 @@ jobs:
     runs-on: 'ubuntu-24.04-8-cores'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -39,12 +39,12 @@ jobs:
         run: |
           sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
 
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/upload-cloud-storage@v2
+      - uses: google-github-actions/upload-cloud-storage@v3
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out'
@@ -59,7 +59,7 @@ jobs:
     runs-on: 'macos-15-xlarge'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - run: brew install protobuf
 
@@ -77,12 +77,12 @@ jobs:
         run: |
           sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
 
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/upload-cloud-storage@v2
+      - uses: google-github-actions/upload-cloud-storage@v3
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out'
@@ -97,7 +97,7 @@ jobs:
     runs-on: 'ubuntu-24.04-4-cores'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler crossbuild-essential-arm64
@@ -114,12 +114,12 @@ jobs:
           sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
           sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
 
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/upload-cloud-storage@v2
+      - uses: google-github-actions/upload-cloud-storage@v3
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out'
@@ -128,7 +128,7 @@ jobs:
           parent: false
           process_gcloudignore: false
 
-      - uses: google-github-actions/upload-cloud-storage@v2
+      - uses: google-github-actions/upload-cloud-storage@v3
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out_arm'
@@ -143,7 +143,7 @@ jobs:
     runs-on: 'macos-15-xlarge'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - run: brew install protobuf
 
@@ -162,12 +162,12 @@ jobs:
           sha256sum out/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
           sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
 
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-      - uses: google-github-actions/upload-cloud-storage@v2
+      - uses: google-github-actions/upload-cloud-storage@v3
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out'
@@ -176,7 +176,7 @@ jobs:
           parent: false
           process_gcloudignore: false
 
-      - uses: google-github-actions/upload-cloud-storage@v2
+      - uses: google-github-actions/upload-cloud-storage@v3
         if: ${{ !inputs.dry_run }}
         with:
           path: 'out_arm'
@@ -197,7 +197,7 @@ jobs:
         git config --global core.eol lf
         git config --global core.filemode false
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Windows SDK
       uses: ChristopheLav/windows-sdk-install@v1
@@ -219,12 +219,12 @@ jobs:
         sha256sum out_arm/webrtc-*.tar.bz2 | tee -a $GITHUB_STEP_SUMMARY
       shell: bash
 
-    - uses: google-github-actions/auth@v2
+    - uses: google-github-actions/auth@v3
       with:
         workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
         service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
 
-    - uses: google-github-actions/upload-cloud-storage@v2
+    - uses: google-github-actions/upload-cloud-storage@v3
       if: ${{ !inputs.dry_run }}
       with:
         path: 'out'
@@ -233,7 +233,7 @@ jobs:
         parent: false
         process_gcloudignore: false
 
-    - uses: google-github-actions/upload-cloud-storage@v2
+    - uses: google-github-actions/upload-cloud-storage@v3
       if: ${{ !inputs.dry_run }}
       with:
         path: 'out_arm'

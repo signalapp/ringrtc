@@ -106,3 +106,7 @@ jobs:
       dry_run: ${{ inputs.dry_run }}
       runner: ${{ inputs.runner_android }}
     secrets: inherit
+    permissions:
+      contents: 'read'
+      # Needed for google-github-actions/auth.
+      id-token: 'write'

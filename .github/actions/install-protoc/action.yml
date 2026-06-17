@@ -1,0 +1,48 @@
+# from https://github.com/mosuka/laurus/pull/517
+name: Install protoc
+description: |
+  Download protoc from the official protocolbuffers/protobuf release
+  assets and add it to PATH. Replaces arduino/setup-protoc@v3
+
+inputs:
+  version:
+    description: |
+      protoc version (without the leading 'v'). Must match an upstream
+      release asset name, e.g. "24.4". Pinning to a concrete patch
+      release replaces the previous "24.x" floating pin so CI is
+      reproducible.
+    required: false
+    default: "35.1"
+
+runs:
+  using: composite
+  steps:
+    - name: Download and install protoc
+      shell: bash
+      env:
+        PROTOC_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64)   suffix="linux-x86_64" ;;
+          Linux-ARM64) suffix="linux-aarch_64" ;;
+          macOS-X64)   suffix="osx-x86_64" ;;
+          macOS-ARM64) suffix="osx-aarch_64" ;;
+          Windows-X64) suffix="win64" ;;
+          *)
+            echo "Unsupported runner: ${RUNNER_OS}-${RUNNER_ARCH}" >&2
+            exit 1
+            ;;
+        esac
+
+        url="https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${suffix}.zip"
+        install_dir="${RUNNER_TEMP}/protoc"
+        mkdir -p "${install_dir}"
+
+        echo "Downloading ${url}"
+        curl -fsSL --retry 3 --retry-delay 5 "${url}" -o "${install_dir}/protoc.zip"
+        unzip -q "${install_dir}/protoc.zip" -d "${install_dir}"
+
+        echo "${install_dir}/bin" >> "${GITHUB_PATH}"
+        "${install_dir}/bin/protoc" --version
