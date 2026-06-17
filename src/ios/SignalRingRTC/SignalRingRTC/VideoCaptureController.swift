@@ -55,7 +55,11 @@ public class VideoCaptureController {
         return capturer.captureSession
     }
 
-    public init() {}
+    public init() {
+        if #available(iOS 16.0, *), captureSession.isMultitaskingCameraAccessSupported {
+            captureSession.isMultitaskingCameraAccessEnabled = true
+        }
+    }
 
     public func startCapture() {
         serialQueue.sync { [weak self] in
