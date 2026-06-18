@@ -70,6 +70,11 @@ jobs:
     container:
       image: ubuntu:20.04
 
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+
     steps:
     - uses: actions/checkout@v6
 
@@ -101,6 +106,11 @@ jobs:
     - run: ./bin/fetch-artifact --platform linux-x64 --release
     - run: ./bin/build-desktop --ringrtc-only --release
 
+    - name: Generate x64 attestation
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+      with:
+        subject-path: src/node/build/linux/libringrtc-x64.node
+
     - name: Upload Desktop Artifacts
       uses: actions/upload-artifact@v7
       with:
@@ -126,6 +136,11 @@ jobs:
 
     runs-on: ${{ inputs.runner_linux_arm64 }}
 
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+
     steps:
     - uses: actions/checkout@v6
 
@@ -140,6 +155,11 @@ jobs:
 
     - run: ./bin/fetch-artifact --platform linux-arm64 --release
     - run: TARGET_ARCH=arm64 ./bin/build-desktop --ringrtc-only --release
+
+    - name: Generate arm64 attestation
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+      with:
+        subject-path: src/node/build/linux/libringrtc-arm64.node
 
     - name: Upload Desktop Artifacts
       uses: actions/upload-artifact@v7
@@ -165,6 +185,11 @@ jobs:
     name: Build Windows
 
     runs-on: ${{ inputs.runner_windows }}
+
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
 
     steps:
     - uses: actions/checkout@v6
@@ -195,6 +220,16 @@ jobs:
         path: src/node/build/
         retention-days: 2
 
+    - name: Generate x64 attestation
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+      with:
+        subject-path: src/node/build/win32/libringrtc-x64.node
+
+    - name: Generate arm64 attestation
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+      with:
+        subject-path: src/node/build/win32/libringrtc-arm64.node
+
     - name: Upload Desktop x64 Debug Info
       uses: actions/upload-artifact@v7
       with:
@@ -222,6 +257,11 @@ jobs:
 
     runs-on: ${{ inputs.runner_mac }}
 
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+
     steps:
     - uses: actions/checkout@v6
 
@@ -240,6 +280,16 @@ jobs:
 
     - run: ./bin/fetch-artifact --platform mac-arm64 --release -o out-arm
     - run: TARGET_ARCH=arm64 OUTPUT_DIR=out-arm ./bin/build-desktop --ringrtc-only --release
+
+    - name: Generate x64 attestation
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+      with:
+        subject-path: src/node/build/darwin/libringrtc-x64.node
+
+    - name: Generate arm64 attestation
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+      with:
+        subject-path: src/node/build/darwin/libringrtc-arm64.node
 
     - name: Upload Desktop Artifacts
       uses: actions/upload-artifact@v7
@@ -472,7 +522,7 @@ jobs:
       - name: Update npm
         run: npm install -g npm@latest
 
-      - run: npm publish --access public
+      - run: npm publish --access public --provenance
         if: ${{ !inputs.dry_run }}
         working-directory: src/node/
 
