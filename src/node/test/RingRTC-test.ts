@@ -18,6 +18,7 @@ import type {
 } from '../index';
 import {
   callIdFromEra,
+  callIdFromRingId,
   CallLinkRestrictions,
   CallLinkRootKey,
   CallRejectReason,
@@ -342,6 +343,16 @@ describe('RingRTC', () => {
     const fromUnusualEra = callIdFromEra('mesozoic');
     assert.notStrictEqual(fromUnusualEra, fromHex);
     assert.notStrictEqual(fromUnusualEra, 0n);
+  });
+
+  it('converts ring IDs to call IDs', () => {
+    assert.strictEqual(
+      callIdFromRingId(0x8877665544332211n),
+      0x8877665544332211n
+    );
+
+    // Negative (signed i64) ring IDs are reinterpreted as unsigned u64
+    assert.strictEqual(callIdFromRingId(-1n), 0xffffffffffffffffn);
   });
 
   it('can peek with pending clients', async () => {

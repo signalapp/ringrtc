@@ -16,7 +16,7 @@ const INVALID_CLIENT_ID = 0;
 export const callIdFromEra: (era: string) => CallId = Native.callIdFromEra;
 
 export function callIdFromRingId(ringId: bigint): CallId {
-  return ringId;
+  return BigInt.asUintN(64, ringId);
 }
 
 class Config {
