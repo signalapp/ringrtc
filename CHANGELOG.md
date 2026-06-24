@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.69.6
+
+- Remove provenance from npm publish that breaks release
+
 ## v2.69.5
 
 - Update WebRTC version to 7778d
