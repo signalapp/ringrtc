@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.69.5
+
+- Update WebRTC version to 7778d
+  - Trigger an ICE regather when reconnecting during group calls
+
+- Desktop: convert ringId to callId as unsigned integer
+
+- Enable iOS isMultitaskingCameraAccessEnabled when available
+
+- Update logging for ice candidates
+
+- CI updates:
+  - Upload attestation for electron artifacts
+  - Update GitHub actions to Node24+
+  - Remove workaround for XDG_RUNTIME_DIR missing on Linux arm64 runner
+
 ## v2.69.4
 
 - Update to cubeb 0.35.3
