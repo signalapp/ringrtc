@@ -522,7 +522,7 @@ jobs:
       - name: Update npm
         run: npm install -g npm@latest
 
-      - run: npm publish --access public --provenance
+      - run: npm publish --access public
         if: ${{ !inputs.dry_run }}
         working-directory: src/node/
 
