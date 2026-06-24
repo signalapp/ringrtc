@@ -421,4 +421,10 @@ impl PeerConnection {
     pub fn close(&self) {
         unsafe { pc::Rust_closePeerConnection(self.rffi.as_borrowed()) };
     }
+
+    pub fn regather_on_all_networks(&self) {
+        unsafe {
+            pc::Rust_regatherOnAllNetworks(self.rffi.as_borrowed());
+        };
+    }
 }

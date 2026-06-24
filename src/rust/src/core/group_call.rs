@@ -5088,7 +5088,8 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                         // ICE failed before we got connected :(
                         Client::end(state, CallEndReason::IceFailedWhileConnecting);
                     }
-                    (ConnectionState::Connecting, IceConnectionState::Checking) => {
+                    (ConnectionState::Connecting, IceConnectionState::Checking) |
+                    (ConnectionState::Reconnecting, IceConnectionState::Checking) => {
                         // Normal.  Not much to report.
                     }
                     (ConnectionState::Connecting, IceConnectionState::Connected) |
@@ -5100,6 +5101,8 @@ impl PeerConnectionObserverTrait for PeerConnectionObserverImpl {
                     (ConnectionState::Connected, IceConnectionState::Disconnected) => {
                         // Some connectivity problems, hopefully temporary.
                         Client::set_connection_state_and_notify_observer(state, ConnectionState::Reconnecting);
+                        info!("regathering candidates on all networks");
+                        state.peer_connection.regather_on_all_networks();
                     }
                     (ConnectionState::Reconnecting, IceConnectionState::Connected) |
                     (ConnectionState::Reconnecting, IceConnectionState::Completed) => {
