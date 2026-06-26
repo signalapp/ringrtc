@@ -110,3 +110,17 @@ if [ -n "$WEBRTC_PLATFORM" ] ; then
         exit 1
     fi
 fi
+
+(
+  set -e  # this will only apply in this subshell
+  if [ -z "${ENV_SH_SKIP_WEBRTC_VERSION_CHECK}" ] && [ -d "${WEBRTC_SRC_DIR}" ]; then
+    cd "${WEBRTC_SRC_DIR}"
+    if ! git merge-base --is-ancestor "${WEBRTC_VERSION}" HEAD; then
+      echo "====================================================================="
+      echo "WARNING: Your webrtc checkout is missing ${WEBRTC_VERSION}."
+      echo "         This may cause problems if the FFI version is now mismatched"
+      echo "====================================================================="
+      sleep 10
+    fi
+  fi
+)
