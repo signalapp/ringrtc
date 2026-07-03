@@ -11,12 +11,16 @@ are run is simulated, with network conditions ranging from perfect to terrible. 
 The simulator is specific to RingRTC and the needs of Signal Messenger. Any other use is not supported.
 
 ## Requirements
-For best results, running the simulator on an amd64 platform with Ubuntu 20.04 is highly recommended. It can
-also be run on macOS, including arm64 machines [see below](#running-on-arm64). 
+For best results, running the simulator on an amd64 platform with Ubuntu 26.04 is highly recommended. It can
+also be run on macOS, including arm64 machines [see below](#running-on-arm64).
 
 In addition to the normal requirements for [building RingRTC](../BUILDING.md), you must also have Docker
 installed. We recommend that the [Docker Engine](https://docs.docker.com/engine/install/ubuntu/) be installed, not the
 Docker Desktop.
+
+The host machine must have the `libpulse-dev` package installed before building the Call Simulator binary
+(call_sim-cli). If the simulation runs but produces only silent audio output, you may need to clear the
+build cache (i.e. `cargo clean`).
 
 ## Media Files
 To run the simulator, you need to provide a set of media files in an accessible location (by default, this is in

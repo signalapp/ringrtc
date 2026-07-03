@@ -756,7 +756,7 @@ pub async fn start_playout(
             "sh",
             "-c",
             &format!(
-                "for i in $(seq 0 {}); do pw-cat --playback --format=s16 --rate=48000 --channels=2 --target=input_sink - < /media/{} > /report/pwplay_{}.log 2>&1; done",
+                "for i in $(seq 0 {}); do pw-cat --raw --playback --format=s16 --rate=48000 --channels=2 --target=input_sink - < /media/{} > /report/pwplay_{}.log 2>&1; done",
                 loops,
                 input_file,
                 name
@@ -768,9 +768,47 @@ pub async fn start_playout(
     Ok(())
 }
 
+/// Maximum number of times to poll for PipeWire/PulseAudio services.
+const SERVICE_READY_MAX_ATTEMPTS: u32 = 100;
+
+/// Maximum number of times to retry `pactl set-default-*`.
+const SET_DEFAULT_MAX_ATTEMPTS: u32 = 30;
+
+/// Delay between poll attempts.
+const POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Poll a named docker container until the given shell command (probe) exits
+/// successfully or max_attempts are reached.
+async fn wait_ready(name: &str, max_attempts: u32, probe: &[&str]) -> Result<bool> {
+    for attempt in 1..=max_attempts {
+        let succeeded = Command::new("docker")
+            .args(["exec", name])
+            .args(probe)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await?
+            .success();
+        if succeeded {
+            println!(
+                "{name} `{}` ready after {attempt} attempt(s)",
+                probe.join(" ")
+            );
+            return Ok(true);
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+    println!(
+        "{name} `{}` not ready after {max_attempts} attempts",
+        probe.join(" ")
+    );
+    Ok(false)
+}
+
 pub async fn start_virtual_audio(name: &str, output_file: &Option<String>) -> Result<()> {
     println!("start virtual audio and its dependencies");
 
+    // Start the session bus. `nohup` keeps it alive after `docker exec` returns.
     let _ = Command::new("docker")
         .args([
             "exec",
@@ -784,6 +822,7 @@ pub async fn start_virtual_audio(name: &str, output_file: &Option<String>) -> Re
         .wait()
         .await?;
 
+    // Start PipeWire. `nohup` keeps it alive after `docker exec` returns.
     let _ = Command::new("docker")
         .args([
             "exec",
@@ -791,11 +830,33 @@ pub async fn start_virtual_audio(name: &str, output_file: &Option<String>) -> Re
             name,
             "sh",
             "-c",
-            "nohup pipewire & nohup wireplumber & nohup pipewire-pulse &",
+            &format!("nohup pipewire >/report/{name}.pipewire.log 2>&1 &"),
         ])
         .spawn()?
         .wait()
         .await?;
+    // Wait for the PipeWire object to be alive before proceeding.
+    wait_ready(name, SERVICE_READY_MAX_ATTEMPTS, &["pw-cli", "info", "0"]).await?;
+
+    // Start the session manager and the PulseAudio-compat server. `nohup` keeps them
+    // alive after `docker exec` returns.
+    let _ = Command::new("docker")
+        .args([
+            "exec",
+            "--detach",
+            name,
+            "sh",
+            "-c",
+            &format!(
+                "nohup wireplumber >/report/{name}.wireplumber.log 2>&1 & \
+                 nohup pipewire-pulse >/report/{name}.pipewire-pulse.log 2>&1 &"
+            ),
+        ])
+        .spawn()?
+        .wait()
+        .await?;
+    // Wait for the PulseAudio object to be alive before proceeding.
+    wait_ready(name, SERVICE_READY_MAX_ATTEMPTS, &["pactl", "info"]).await?;
 
     // Create a virtual mic
     let _ = Command::new("docker")
@@ -814,17 +875,13 @@ pub async fn start_virtual_audio(name: &str, output_file: &Option<String>) -> Re
         .wait()
         .await?;
 
-    let _ = Command::new("docker")
-        .args([
-            "exec",
-            name,
-            "pactl",
-            "set-default-source",
-            "input_sink.monitor",
-        ])
-        .spawn()?
-        .wait()
-        .await?;
+    // Keep retrying setting the default source while wireplumber finishes registering.
+    wait_ready(
+        name,
+        SET_DEFAULT_MAX_ATTEMPTS,
+        &["pactl", "set-default-source", "input_sink.monitor"],
+    )
+    .await?;
 
     if let Some(output) = output_file {
         // Create a virtual speaker
@@ -876,11 +933,13 @@ pub async fn start_virtual_audio(name: &str, output_file: &Option<String>) -> Re
             .await;
     }
 
-    let _ = Command::new("docker")
-        .args(["exec", name, "pactl", "set-default-sink", "file_speaker"])
-        .spawn()?
-        .wait()
-        .await?;
+    // Keep retrying setting the default sink while wireplumber finishes registering.
+    wait_ready(
+        name,
+        SET_DEFAULT_MAX_ATTEMPTS,
+        &["pactl", "set-default-sink", "file_speaker"],
+    )
+    .await?;
 
     Ok(())
 }
