@@ -15,3 +15,5 @@
 -keep class org.webrtc.** { *; }
 -keep class org.signal.ringrtc.** { *; }
 -keep class org.jni_zero.** { *; }
+# JniZeroJni isn't packaged in libwebrtc.jar, it is never invoked.
+-dontwarn org.jni_zero.JniZeroJni

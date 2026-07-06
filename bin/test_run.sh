@@ -34,11 +34,23 @@ SMALL_CORRECTNESS_TESTS="audio_decoder_unittests \
   webrtc_opus_fec_test"
 
 # Tests that take > 2 minutes.
-MEDIUM_CORRECTNESS_TESTS="modules_tests rtc_unittests slow_peer_connection_unittests video_engine_tests"
+MEDIUM_CORRECTNESS_TESTS="modules_tests \
+  rtc_unittests \
+  slow_peer_connection_unittests"
+  
 # Tests that take > 5 minutes
-LARGE_CORRECTNESS_TESTS="modules_unittests peerconnection_unittests"
+LARGE_CORRECTNESS_TESTS="modules_unittests \
+  video_adaptation_tests\
+  video_tests \
+  peerconnection_unittests \
+  call_tests \
+  resource_adaptation_tests \
+  time_delta_rs_unittests \
+  timestamp_rs_unittests"
 
-PERF_TESTS="audio_codec_speed_tests video_codec_perf_tests webrtc_perf_tests"
+PERF_TESTS="audio_codec_speed_tests \
+  video_codec_perf_tests \
+  webrtc_perf_tests"
 
 usage()
 {

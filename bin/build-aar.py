@@ -215,7 +215,8 @@ def BuildArch(dry_run, project_dir, webrtc_src_dir, build_dir, arch, debug_build
             'rtc_disable_trace_events': 'true',
             'android_static_analysis': '"off"',
             'use_siso': 'true',
-            'rtc_opus_support_dred': 'true'
+            'rtc_opus_support_dred': 'true',
+            'use_debug_fission': 'false'
         }
         if debug_build is True:
             gn_args['is_debug'] = 'true'
