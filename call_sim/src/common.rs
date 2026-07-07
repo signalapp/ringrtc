@@ -191,8 +191,6 @@ pub struct SummaryReportColumns {
     pub show_send_stats: bool,
     /// Show client receive stats columns in the summary.
     pub show_receive_stats: bool,
-    /// Show DRED-related stats (concealed samples, concealment rate, FEC packets).
-    pub show_dred_stats: bool,
 }
 
 impl Default for SummaryReportColumns {
@@ -205,7 +203,6 @@ impl Default for SummaryReportColumns {
             show_video: true,
             show_send_stats: true,
             show_receive_stats: true,
-            show_dred_stats: false,
         }
     }
 }
@@ -220,7 +217,6 @@ impl SummaryReportColumns {
             show_video: false,
             show_send_stats: true,
             show_receive_stats: true,
-            show_dred_stats: false,
         }
     }
 }

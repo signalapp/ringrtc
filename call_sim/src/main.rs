@@ -162,8 +162,6 @@ async fn run_baseline(test: &mut Test, with_video: bool, with_dred: bool) -> Res
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: with_video,
-                show_send_stats: !with_dred,
-                show_dred_stats: with_dred,
                 ..Default::default()
             },
             ..Default::default()
@@ -262,8 +260,6 @@ async fn run_bursty_loss_test(test: &mut Test, with_video: bool, with_dred: bool
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: with_video,
-                show_send_stats: !with_dred,
-                show_dred_stats: with_dred,
                 ..Default::default()
             },
             ..Default::default()
@@ -427,8 +423,6 @@ async fn run_deterministic_loss_test(
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: with_video,
-                show_send_stats: !with_dred,
-                show_dred_stats: with_dred,
                 ..Default::default()
             },
             ..Default::default()
@@ -857,8 +851,6 @@ async fn run_changing_bandwidth_audio_test(test: &mut Test, with_dred: bool) -> 
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: false,
-                show_send_stats: !with_dred,
-                show_dred_stats: with_dred,
                 ..Default::default()
             },
             ..Default::default()
@@ -1146,8 +1138,6 @@ async fn run_dred_tests(test: &mut Test) -> Result<()> {
                 show_pesq_mos: true,
                 show_plc_mos: true,
                 show_video: false,
-                show_send_stats: false,
-                show_dred_stats: true,
                 ..Default::default()
             },
             ..Default::default()

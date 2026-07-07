@@ -105,10 +105,15 @@ pub struct StatsData {
     /// Point data in the form (index, value).
     pub points: Vec<ChartPoint>,
 
+    /// Running sum of squares of the values within the filtered range, used to
+    /// calculate the standard deviation.
+    sum_sq: f64,
+
     /// Calculated statistics within the filtered range.
     pub min: f32,
     pub max: f32,
     pub ave: f32,
+    pub std_dev: f32,
     pub total: f64,
 
     /// Track the max inserted index in case data is aperiodic.
@@ -124,9 +129,11 @@ impl Default for StatsData {
             filter_max: usize::MAX,
             period: 1.0,
             points: vec![],
+            sum_sq: 0.0,
             min: f32::MAX,
             max: 0.0,
             ave: 0.0,
+            std_dev: 0.0,
             total: 0.0,
             max_index: 0.0,
         }
@@ -158,8 +165,13 @@ impl StatsData {
         self.points.push((index, value));
 
         if self.points.len() > self.filter_min && self.points.len() <= self.filter_max {
+            let n = (self.points.len() - self.filter_min) as f64;
             self.total += value as f64;
-            self.ave = self.total as f32 / (self.points.len() - self.filter_min) as f32;
+            self.sum_sq += (value as f64) * (value as f64);
+            let mean = self.total / n;
+            self.ave = mean as f32;
+            // Population standard deviation: sqrt(Σx²/N − mean²), max(0.0) guards float error.
+            self.std_dev = ((self.sum_sq / n) - mean * mean).max(0.0).sqrt() as f32;
             self.min = self.min.min(value);
             self.max = self.max.max(value);
         }
@@ -419,147 +431,74 @@ impl DockerStatsReport {
     }
 }
 
-// Structures used only to transfer data that is moved.
-
 #[derive(Debug, Default)]
-pub struct ConnectionStatsTransfer {
-    pub timestamp_us: Vec<u64>,
-    pub current_round_trip_time: StatsData,
-    pub available_outgoing_bitrate: StatsData,
-}
-
-#[derive(Debug, Default)]
-pub struct AudioSendStatsTransfer {
-    pub ssrc: String,
-    pub packets_per_second: StatsData,
-    pub average_packet_size: StatsData,
-    pub bitrate: StatsData,
-    pub remote_packet_loss: StatsData,
-    pub remote_jitter: StatsData,
-    pub remote_round_trip_time: StatsData,
-    pub audio_energy: StatsData,
-}
-
-#[derive(Debug, Default)]
-pub struct VideoSendStatsTransfer {
-    pub ssrc: String,
-    pub packets_per_second: StatsData,
-    pub average_packet_size: StatsData,
-    pub bitrate: StatsData,
-    pub framerate: StatsData,
-    pub key_frames_encoded: StatsData,
-    pub retransmitted_packets_sent: StatsData,
-    pub retransmitted_bitrate: StatsData,
-    pub send_delay_per_packet: StatsData,
-    pub nack_count: StatsData,
-    pub pli_count: StatsData,
-    pub remote_packet_loss: StatsData,
-    pub remote_jitter: StatsData,
-    pub remote_round_trip_time: StatsData,
-    pub resolution: StatsData,
-}
-
-#[derive(Debug, Default)]
-pub struct AudioReceiveStatsTransfer {
-    pub ssrc: String,
-    pub packets_per_second: StatsData,
-    pub packet_loss: StatsData,
-    pub bitrate: StatsData,
-    pub jitter: StatsData,
-    pub audio_energy: StatsData,
-    pub jitter_buffer_delay: StatsData,
-    pub jitter_buffer_target_delay: StatsData,
-    pub jitter_buffer_flushes: StatsData,
-    pub concealed_samples_pct: StatsData,
-    pub fec_packets_received: StatsData,
-    pub relative_arrival_delay_per_packet: StatsData,
-}
-
-#[derive(Debug, Default)]
-pub struct VideoReceiveStatsTransfer {
-    pub ssrc: String,
-    pub packets_per_second: StatsData,
-    pub packet_loss: StatsData,
-    pub bitrate: StatsData,
-    pub framerate: StatsData,
-    pub key_frames_decoded: StatsData,
-    pub resolution: StatsData,
-}
-
-#[derive(Debug, Default)]
-pub struct AudioAdaptationTransfer {
-    pub bitrate: StatsData,
-    pub packet_length: StatsData,
-}
-
-#[derive(Debug)]
 pub struct ConnectionStats {
-    pub current_round_trip_time_stats: Stats,
-    pub available_outgoing_bitrate_stats: Stats,
+    pub current_round_trip_time: Stats,
+    pub available_outgoing_bitrate: Stats,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AudioSendStats {
     pub ssrc: String,
-    pub packets_per_second_stats: Stats,
-    pub average_packet_size_stats: Stats,
-    pub bitrate_stats: Stats,
-    pub remote_packet_loss_stats: Stats,
-    pub remote_jitter_stats: Stats,
-    pub remote_round_trip_time_stats: Stats,
-    pub audio_energy_stats: Stats,
+    pub packets_per_second: Stats,
+    pub average_packet_size: Stats,
+    pub bitrate: Stats,
+    pub remote_packet_loss: Stats,
+    pub remote_jitter: Stats,
+    pub remote_round_trip_time: Stats,
+    pub audio_energy: Stats,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VideoSendStats {
     pub ssrc: String,
-    pub packets_per_second_stats: Stats,
-    pub average_packet_size_stats: Stats,
-    pub bitrate_stats: Stats,
-    pub framerate_stats: Stats,
-    pub key_frames_encoded_stats: Stats,
-    pub retransmitted_packets_sent_stats: Stats,
-    pub retransmitted_bitrate_stats: Stats,
-    pub send_delay_per_packet_stats: Stats,
-    pub nack_count_stats: Stats,
-    pub pli_count_stats: Stats,
-    pub remote_packet_loss_stats: Stats,
-    pub remote_jitter_stats: Stats,
-    pub remote_round_trip_time_stats: Stats,
+    pub packets_per_second: Stats,
+    pub average_packet_size: Stats,
+    pub bitrate: Stats,
+    pub framerate: Stats,
+    pub key_frames_encoded: Stats,
+    pub retransmitted_packets_sent: Stats,
+    pub retransmitted_bitrate: Stats,
+    pub send_delay_per_packet: Stats,
+    pub nack_count: Stats,
+    pub pli_count: Stats,
+    pub remote_packet_loss: Stats,
+    pub remote_jitter: Stats,
+    pub remote_round_trip_time: Stats,
     pub resolution: Stats,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AudioReceiveStats {
     pub ssrc: String,
-    pub packets_per_second_stats: Stats,
-    pub packet_loss_stats: Stats,
-    pub bitrate_stats: Stats,
-    pub jitter_stats: Stats,
-    pub audio_energy_stats: Stats,
-    pub jitter_buffer_delay_stats: Stats,
-    pub jitter_buffer_target_delay_stats: Stats,
-    pub jitter_buffer_flushes_stats: Stats,
-    pub concealed_samples_pct_stats: Stats,
-    pub fec_packets_received_stats: Stats,
-    pub relative_arrival_delay_per_packet_stats: Stats,
+    pub packets_per_second: Stats,
+    pub packet_loss: Stats,
+    pub bitrate: Stats,
+    pub jitter: Stats,
+    pub audio_energy: Stats,
+    pub jitter_buffer_delay: Stats,
+    pub jitter_buffer_target_delay: Stats,
+    pub jitter_buffer_flushes: Stats,
+    pub concealed_samples_pct: Stats,
+    pub fec_packets_received: Stats,
+    pub relative_arrival_delay_per_packet: Stats,
 }
 
 #[derive(Debug, Default)]
 pub struct VideoReceiveStats {
     pub ssrc: String,
-    pub packets_per_second_stats: Stats,
-    pub packet_loss_stats: Stats,
-    pub bitrate_stats: Stats,
-    pub framerate_stats: Stats,
-    pub key_frames_decoded_stats: Stats,
+    pub packets_per_second: Stats,
+    pub packet_loss: Stats,
+    pub bitrate: Stats,
+    pub framerate: Stats,
+    pub key_frames_decoded: Stats,
     pub resolution: Stats,
 }
 
 #[derive(Debug, Default)]
 pub struct AudioAdaptation {
-    pub bitrate_stats: Stats,
-    pub packet_length_stats: Stats,
+    pub bitrate: Stats,
+    pub packet_length: Stats,
 }
 
 #[derive(Debug)]
@@ -576,12 +515,12 @@ impl ClientLogReport {
     async fn parse(
         file_name: &str,
     ) -> Result<(
-        ConnectionStatsTransfer,
-        AudioSendStatsTransfer,
-        HashMap<String, VideoSendStatsTransfer>,
-        HashMap<String, AudioReceiveStatsTransfer>,
-        HashMap<String, VideoReceiveStatsTransfer>,
-        AudioAdaptationTransfer,
+        ConnectionStats,
+        AudioSendStats,
+        HashMap<String, VideoSendStats>,
+        HashMap<String, AudioReceiveStats>,
+        HashMap<String, VideoReceiveStats>,
+        AudioAdaptation,
     )> {
         // Look through the file and pull out RingRTC logs, particularly the `stats!` details.
         let file = File::open(file_name).await?;
@@ -589,7 +528,7 @@ impl ClientLogReport {
 
         // Example: ringrtc_stats!,connection,0xca111d,1667611058243536,0ms,100000bps
         let re_connection_line = Regex::new(
-            r".*ringrtc_stats!,connection,(?P<call_id>0x[0-9a-fA-F]+),(?P<timestamp_us>\d+),(?P<current_round_trip_time>\d+)ms,(?P<available_outgoing_bitrate>\d+)bps",
+            r".*ringrtc_stats!,connection,0x[0-9a-fA-F]+,\d+,(?P<current_round_trip_time>\d+)ms,(?P<available_outgoing_bitrate>\d+)bps",
         )?;
 
         // Example: ringrtc_stats!,audio,send,2002,40.0,100.0,32000.0bps,0.0%,0ms,0ms,0.000
@@ -617,27 +556,33 @@ impl ClientLogReport {
             r".*ringrtc_adapt!,audio,(?P<time>\d+),(?P<bitrate>\d+),(?P<packet_length>\d+)",
         )?;
 
-        let mut connection_stats = ConnectionStatsTransfer::default();
-        let mut audio_send_stats = AudioSendStatsTransfer::default();
-        let mut video_send_stats_map = HashMap::<String, VideoSendStatsTransfer>::new();
-        let mut audio_receive_stats_map = HashMap::<String, AudioReceiveStatsTransfer>::new();
-        let mut video_receive_stats_map = HashMap::<String, VideoReceiveStatsTransfer>::new();
-        let mut audio_adaptation_stats = AudioAdaptationTransfer {
-            bitrate: StatsData::new_skip_n(0),
-            packet_length: StatsData::new_skip_n(0),
+        let mut connection_stats = ConnectionStats::default();
+        let mut audio_send_stats = AudioSendStats::default();
+        let mut video_send_stats_map = HashMap::<String, VideoSendStats>::new();
+        let mut audio_receive_stats_map = HashMap::<String, AudioReceiveStats>::new();
+        let mut video_receive_stats_map = HashMap::<String, VideoReceiveStats>::new();
+        // Adaptation stats are aperiodic; don't skip any leading data points.
+        let mut audio_adaptation_stats = AudioAdaptation {
+            bitrate: Stats {
+                data: StatsData::new_skip_n(0),
+                ..Default::default()
+            },
+            packet_length: Stats {
+                data: StatsData::new_skip_n(0),
+                ..Default::default()
+            },
         };
 
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await? {
             if let Some(cap) = re_connection_line.captures(&line) {
                 connection_stats
-                    .timestamp_us
-                    .push(u64::from_str(&cap["timestamp_us"])?);
-                connection_stats
                     .current_round_trip_time
+                    .data
                     .push(f32::from_str(&cap["current_round_trip_time"])?);
                 connection_stats
                     .available_outgoing_bitrate
+                    .data
                     .push(f32::from_str(&cap["available_outgoing_bitrate"])? / 1000.0);
                 continue;
             }
@@ -646,24 +591,31 @@ impl ClientLogReport {
                 audio_send_stats.ssrc = cap["ssrc"].to_string();
                 audio_send_stats
                     .packets_per_second
+                    .data
                     .push(f32::from_str(&cap["packets_per_second"])?);
                 audio_send_stats
                     .average_packet_size
+                    .data
                     .push(f32::from_str(&cap["average_packet_size"])?);
                 audio_send_stats
                     .bitrate
+                    .data
                     .push(f32::from_str(&cap["bitrate"])? / 1000.0);
                 audio_send_stats
                     .remote_packet_loss
+                    .data
                     .push(f32::from_str(&cap["remote_packet_loss"])?);
                 audio_send_stats
                     .remote_jitter
+                    .data
                     .push(f32::from_str(&cap["remote_jitter"])?);
                 audio_send_stats
                     .remote_round_trip_time
+                    .data
                     .push(f32::from_str(&cap["remote_round_trip_time"])?);
                 audio_send_stats
                     .audio_energy
+                    .data
                     .push(f32::from_str(&cap["audio_energy"])?);
                 continue;
             }
@@ -675,42 +627,55 @@ impl ClientLogReport {
                 video_send_stats.ssrc = ssrc;
                 video_send_stats
                     .packets_per_second
+                    .data
                     .push(f32::from_str(&cap["packets_per_second"])?);
                 video_send_stats
                     .average_packet_size
+                    .data
                     .push(f32::from_str(&cap["average_packet_size"])?);
                 video_send_stats
                     .bitrate
+                    .data
                     .push(f32::from_str(&cap["bitrate"])? / 1000.0);
                 video_send_stats
                     .framerate
+                    .data
                     .push(f32::from_str(&cap["framerate"])?);
                 video_send_stats
                     .key_frames_encoded
+                    .data
                     .push(f32::from_str(&cap["key_frames_encoded"])?);
                 video_send_stats
                     .retransmitted_packets_sent
+                    .data
                     .push(f32::from_str(&cap["retransmitted_packets_sent"])?);
                 video_send_stats
                     .retransmitted_bitrate
+                    .data
                     .push(f32::from_str(&cap["retransmitted_bitrate"])?);
                 video_send_stats
                     .send_delay_per_packet
+                    .data
                     .push(f32::from_str(&cap["send_delay_per_packet"])?);
                 video_send_stats
                     .nack_count
+                    .data
                     .push(f32::from_str(&cap["nack_count"])?);
                 video_send_stats
                     .pli_count
+                    .data
                     .push(f32::from_str(&cap["pli_count"])?);
                 video_send_stats
                     .remote_packet_loss
+                    .data
                     .push(f32::from_str(&cap["remote_packet_loss"])?);
                 video_send_stats
                     .remote_jitter
+                    .data
                     .push(f32::from_str(&cap["remote_jitter"])?);
                 video_send_stats
                     .remote_round_trip_time
+                    .data
                     .push(f32::from_str(&cap["remote_round_trip_time"])?);
 
                 let res = &cap["resolution"];
@@ -718,7 +683,7 @@ impl ClientLogReport {
                     .split('x')
                     .map(|n| n.parse::<usize>().unwrap())
                     .product();
-                video_send_stats.resolution.push(res as f32);
+                video_send_stats.resolution.data.push(res as f32);
 
                 continue;
             }
@@ -730,36 +695,47 @@ impl ClientLogReport {
                 audio_receive_stats.ssrc = ssrc;
                 audio_receive_stats
                     .packets_per_second
+                    .data
                     .push(f32::from_str(&cap["packets_per_second"])?);
                 audio_receive_stats
                     .bitrate
+                    .data
                     .push(f32::from_str(&cap["bitrate"])? / 1000.0);
                 audio_receive_stats
                     .audio_energy
+                    .data
                     .push(f32::from_str(&cap["audio_energy"])?);
                 audio_receive_stats
                     .packet_loss
+                    .data
                     .push(f32::from_str(&cap["packet_loss"])?);
                 audio_receive_stats
                     .jitter
+                    .data
                     .push(f32::from_str(&cap["jitter"])?);
                 audio_receive_stats
                     .jitter_buffer_delay
+                    .data
                     .push(f32::from_str(&cap["jitter_buffer_delay"])?);
                 audio_receive_stats
                     .jitter_buffer_target_delay
+                    .data
                     .push(f32::from_str(&cap["jitter_buffer_target_delay"])?);
                 audio_receive_stats
                     .jitter_buffer_flushes
+                    .data
                     .push(f32::from_str(&cap["jitter_buffer_flushes"])?);
                 audio_receive_stats
                     .concealed_samples_pct
+                    .data
                     .push(f32::from_str(&cap["concealed_samples_pct"])?);
                 audio_receive_stats
                     .fec_packets_received
+                    .data
                     .push(f32::from_str(&cap["fec_packets_received"])?);
                 audio_receive_stats
                     .relative_arrival_delay_per_packet
+                    .data
                     .push(f32::from_str(&cap["relative_arrival_delay_per_packet"])?);
                 continue;
             }
@@ -770,18 +746,23 @@ impl ClientLogReport {
                 video_receive_stats.ssrc = ssrc;
                 video_receive_stats
                     .packets_per_second
+                    .data
                     .push(f32::from_str(&cap["packets_per_second"])?);
                 video_receive_stats
                     .bitrate
+                    .data
                     .push(f32::from_str(&cap["bitrate"])? / 1000.0);
                 video_receive_stats
                     .packet_loss
+                    .data
                     .push(f32::from_str(&cap["packet_loss"])?);
                 video_receive_stats
                     .framerate
+                    .data
                     .push(f32::from_str(&cap["framerate"])?);
                 video_receive_stats
                     .key_frames_decoded
+                    .data
                     .push(f32::from_str(&cap["key_frames_decoded"])?);
 
                 let res = &cap["resolution"];
@@ -789,7 +770,7 @@ impl ClientLogReport {
                     .split('x')
                     .map(|n| n.parse::<usize>().unwrap())
                     .product();
-                video_receive_stats.resolution.push(res as f32);
+                video_receive_stats.resolution.data.push(res as f32);
                 continue;
             }
 
@@ -797,9 +778,11 @@ impl ClientLogReport {
                 let time_index = f32::from_str(&cap["time"])?;
                 audio_adaptation_stats
                     .bitrate
+                    .data
                     .push_with_index(time_index, f32::from_str(&cap["bitrate"])? / 1000.0);
                 audio_adaptation_stats
                     .packet_length
+                    .data
                     .push_with_index(time_index, f32::from_str(&cap["packet_length"])?);
                 continue;
             }
@@ -828,15 +811,16 @@ impl ClientLogReport {
         // We assume that all entries in the send stats vectors are in sync.
         // stats in the receive_stats are dependent on the clients join time
         // for now we ignore discrepancies in the receive_stats length
-        if (connection_stats.timestamp_us.len() != audio_send_stats.bitrate.points.len())
+        let connection_point_count = connection_stats.current_round_trip_time.data.points.len();
+        if (connection_point_count != audio_send_stats.bitrate.data.points.len())
             || video_send_stats_map
                 .values()
-                .any(|stats| connection_stats.timestamp_us.len() != stats.bitrate.points.len())
+                .any(|stats| connection_point_count != stats.bitrate.data.points.len())
         {
             return Err(anyhow!("RingRTC stats were not in sync!"));
         }
 
-        let current_round_trip_time_stats = Stats {
+        let current_round_trip_time = Stats {
             config: StatsConfig {
                 title: "Current Round Trip Time".to_string(),
                 chart_name: format!("{}.log.connection.rtt.svg", client_name),
@@ -844,10 +828,10 @@ impl ClientLogReport {
                 y_label: "milliseconds".to_string(),
                 ..Default::default()
             },
-            data: connection_stats.current_round_trip_time,
+            data: connection_stats.current_round_trip_time.data,
         };
 
-        let available_outgoing_bitrate_stats = Stats {
+        let available_outgoing_bitrate = Stats {
             config: StatsConfig {
                 title: "Available Outgoing Bitrate".to_string(),
                 chart_name: format!("{}.log.connection.outgoing_bitrate.svg", client_name),
@@ -855,15 +839,15 @@ impl ClientLogReport {
                 y_label: "Kbps".to_string(),
                 ..Default::default()
             },
-            data: connection_stats.available_outgoing_bitrate,
+            data: connection_stats.available_outgoing_bitrate.data,
         };
 
         let connection_stats = ConnectionStats {
-            current_round_trip_time_stats,
-            available_outgoing_bitrate_stats,
+            current_round_trip_time,
+            available_outgoing_bitrate,
         };
 
-        let packets_per_second_stats = Stats {
+        let packets_per_second = Stats {
             config: StatsConfig {
                 title: "Audio Send Packet Rate".to_string(),
                 chart_name: format!("{}.log.audio.send.packet_rate.svg", client_name),
@@ -871,10 +855,10 @@ impl ClientLogReport {
                 y_label: "Packets/Second".to_string(),
                 ..Default::default()
             },
-            data: audio_send_stats.packets_per_second,
+            data: audio_send_stats.packets_per_second.data,
         };
 
-        let average_packet_size_stats = Stats {
+        let average_packet_size = Stats {
             config: StatsConfig {
                 title: "Audio Send Packet Size".to_string(),
                 chart_name: format!("{}.log.audio.send.packet_size.svg", client_name),
@@ -882,10 +866,10 @@ impl ClientLogReport {
                 y_label: "Average Size Per Period".to_string(),
                 ..Default::default()
             },
-            data: audio_send_stats.average_packet_size,
+            data: audio_send_stats.average_packet_size.data,
         };
 
-        let bitrate_stats = Stats {
+        let bitrate = Stats {
             config: StatsConfig {
                 title: "Audio Send Bitrate".to_string(),
                 chart_name: format!("{}.log.audio.send.bitrate.svg", client_name),
@@ -893,10 +877,10 @@ impl ClientLogReport {
                 y_label: "Kbps".to_string(),
                 ..Default::default()
             },
-            data: audio_send_stats.bitrate,
+            data: audio_send_stats.bitrate.data,
         };
 
-        let remote_packet_loss_stats = Stats {
+        let remote_packet_loss = Stats {
             config: StatsConfig {
                 title: "Audio Send Remote Packet Loss".to_string(),
                 chart_name: format!("{}.log.audio.send.remote_loss.svg", client_name),
@@ -904,10 +888,10 @@ impl ClientLogReport {
                 y_label: "%".to_string(),
                 ..Default::default()
             },
-            data: audio_send_stats.remote_packet_loss,
+            data: audio_send_stats.remote_packet_loss.data,
         };
 
-        let remote_jitter_stats = Stats {
+        let remote_jitter = Stats {
             config: StatsConfig {
                 title: "Audio Send Remote Jitter".to_string(),
                 chart_name: format!("{}.log.audio.send.remote_jitter.svg", client_name),
@@ -915,10 +899,10 @@ impl ClientLogReport {
                 y_label: "milliseconds".to_string(),
                 ..Default::default()
             },
-            data: audio_send_stats.remote_jitter,
+            data: audio_send_stats.remote_jitter.data,
         };
 
-        let remote_round_trip_time_stats = Stats {
+        let remote_round_trip_time = Stats {
             config: StatsConfig {
                 title: "Audio Send Remote Round Trip Time".to_string(),
                 chart_name: format!("{}.log.audio.send.remote_rtt.svg", client_name),
@@ -926,10 +910,10 @@ impl ClientLogReport {
                 y_label: "milliseconds".to_string(),
                 ..Default::default()
             },
-            data: audio_send_stats.remote_round_trip_time,
+            data: audio_send_stats.remote_round_trip_time.data,
         };
 
-        let audio_energy_stats = Stats {
+        let audio_energy = Stats {
             config: StatsConfig {
                 title: "Audio Send Audio Energy".to_string(),
                 chart_name: format!("{}.log.audio.send.audio_energy.svg", client_name),
@@ -938,23 +922,23 @@ impl ClientLogReport {
                 y_max: Some(1.0),
                 ..Default::default()
             },
-            data: audio_send_stats.audio_energy,
+            data: audio_send_stats.audio_energy.data,
         };
 
         let audio_send_stats = AudioSendStats {
             ssrc: audio_send_stats.ssrc,
-            packets_per_second_stats,
-            average_packet_size_stats,
-            bitrate_stats,
-            remote_packet_loss_stats,
-            remote_jitter_stats,
-            remote_round_trip_time_stats,
-            audio_energy_stats,
+            packets_per_second,
+            average_packet_size,
+            bitrate,
+            remote_packet_loss,
+            remote_jitter,
+            remote_round_trip_time,
+            audio_energy,
         };
 
         let mut video_send_stats_list = Vec::with_capacity(video_send_stats_map.len());
         for (ssrc, video_send_stats) in video_send_stats_map {
-            let packets_per_second_stats = Stats {
+            let packets_per_second = Stats {
                 config: StatsConfig {
                     title: format!("Video Send Packet Rate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.packet_rate.svg", client_name),
@@ -962,10 +946,10 @@ impl ClientLogReport {
                     y_label: "Packets/Second".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.packets_per_second,
+                data: video_send_stats.packets_per_second.data,
             };
 
-            let average_packet_size_stats = Stats {
+            let average_packet_size = Stats {
                 config: StatsConfig {
                     title: format!("Video Send Packet Size (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.packet_size.svg", client_name),
@@ -973,10 +957,10 @@ impl ClientLogReport {
                     y_label: "Average Size Per Period".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.average_packet_size,
+                data: video_send_stats.average_packet_size.data,
             };
 
-            let bitrate_stats = Stats {
+            let bitrate = Stats {
                 config: StatsConfig {
                     title: format!("Video Send Bitrate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.bitrate.svg", client_name),
@@ -984,10 +968,10 @@ impl ClientLogReport {
                     y_label: "Kbps".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.bitrate,
+                data: video_send_stats.bitrate.data,
             };
 
-            let framerate_stats = Stats {
+            let framerate = Stats {
                 config: StatsConfig {
                     title: format!("Video Send Framerate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.framerate.svg", client_name),
@@ -996,10 +980,10 @@ impl ClientLogReport {
                     y_max: Some(32.0),
                     ..Default::default()
                 },
-                data: video_send_stats.framerate,
+                data: video_send_stats.framerate.data,
             };
 
-            let key_frames_encoded_stats = Stats {
+            let key_frames_encoded = Stats {
                 config: StatsConfig {
                     title: format!("Video Key Frames Encoded (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.key_frames_encoded.svg", client_name),
@@ -1007,10 +991,10 @@ impl ClientLogReport {
                     y_label: "# frames".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.key_frames_encoded,
+                data: video_send_stats.key_frames_encoded.data,
             };
 
-            let retransmitted_packets_sent_stats = Stats {
+            let retransmitted_packets_sent = Stats {
                 config: StatsConfig {
                     title: format!("Video Retransmitted Packets (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.retransmitted_packets.svg", client_name),
@@ -1018,10 +1002,10 @@ impl ClientLogReport {
                     y_label: "# Packets".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.retransmitted_packets_sent,
+                data: video_send_stats.retransmitted_packets_sent.data,
             };
 
-            let retransmitted_bitrate_stats = Stats {
+            let retransmitted_bitrate = Stats {
                 config: StatsConfig {
                     title: format!("Video Send Retransmitted Bitrate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.retransmitted_bitrate.svg", client_name),
@@ -1029,10 +1013,10 @@ impl ClientLogReport {
                     y_label: "Kbps".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.retransmitted_bitrate,
+                data: video_send_stats.retransmitted_bitrate.data,
             };
 
-            let send_delay_per_packet_stats = Stats {
+            let send_delay_per_packet = Stats {
                 config: StatsConfig {
                     title: format!("Video Send Send Delay Per Packet (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.delay_per_packet.svg", client_name),
@@ -1040,10 +1024,10 @@ impl ClientLogReport {
                     y_label: "ms".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.send_delay_per_packet,
+                data: video_send_stats.send_delay_per_packet.data,
             };
 
-            let nack_count_stats = Stats {
+            let nack_count = Stats {
                 config: StatsConfig {
                     title: format!("Video Received NACK Count (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.nack_count.svg", client_name),
@@ -1051,10 +1035,10 @@ impl ClientLogReport {
                     y_label: "# NACKs".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.nack_count,
+                data: video_send_stats.nack_count.data,
             };
 
-            let pli_count_stats = Stats {
+            let pli_count = Stats {
                 config: StatsConfig {
                     title: format!("Video Received PLI Count (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.pli_count.svg", client_name),
@@ -1062,10 +1046,10 @@ impl ClientLogReport {
                     y_label: "# PLIs".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.pli_count,
+                data: video_send_stats.pli_count.data,
             };
 
-            let remote_packet_loss_stats = Stats {
+            let remote_packet_loss = Stats {
                 config: StatsConfig {
                     title: format!("Video Send Remote Packet Loss (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.remote_loss.svg", client_name),
@@ -1073,10 +1057,10 @@ impl ClientLogReport {
                     y_label: "%".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.remote_packet_loss,
+                data: video_send_stats.remote_packet_loss.data,
             };
 
-            let remote_jitter_stats = Stats {
+            let remote_jitter = Stats {
                 config: StatsConfig {
                     title: format!("Video Send Remote Jitter (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.send.remote_jitter.svg", client_name),
@@ -1084,10 +1068,10 @@ impl ClientLogReport {
                     y_label: "milliseconds".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.remote_jitter,
+                data: video_send_stats.remote_jitter.data,
             };
 
-            let remote_round_trip_time_stats = Stats {
+            let remote_round_trip_time = Stats {
                 config: StatsConfig {
                     title: "Video Send Remote Round Trip Time".to_string(),
                     chart_name: format!("{}.log.video.send.remote_rtt.svg", client_name),
@@ -1095,7 +1079,7 @@ impl ClientLogReport {
                     y_label: "milliseconds".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.remote_round_trip_time,
+                data: video_send_stats.remote_round_trip_time.data,
             };
 
             let resolution = Stats {
@@ -1106,31 +1090,31 @@ impl ClientLogReport {
                     y_label: "Resolution (sq. pixels)".to_string(),
                     ..Default::default()
                 },
-                data: video_send_stats.resolution,
+                data: video_send_stats.resolution.data,
             };
 
             video_send_stats_list.push(VideoSendStats {
                 ssrc: video_send_stats.ssrc,
-                packets_per_second_stats,
-                average_packet_size_stats,
-                bitrate_stats,
-                framerate_stats,
-                key_frames_encoded_stats,
-                retransmitted_packets_sent_stats,
-                retransmitted_bitrate_stats,
-                send_delay_per_packet_stats,
-                nack_count_stats,
-                pli_count_stats,
-                remote_packet_loss_stats,
-                remote_jitter_stats,
-                remote_round_trip_time_stats,
+                packets_per_second,
+                average_packet_size,
+                bitrate,
+                framerate,
+                key_frames_encoded,
+                retransmitted_packets_sent,
+                retransmitted_bitrate,
+                send_delay_per_packet,
+                nack_count,
+                pli_count,
+                remote_packet_loss,
+                remote_jitter,
+                remote_round_trip_time,
                 resolution,
             });
         }
 
         let mut audio_receive_stats_list = Vec::with_capacity(audio_receive_stats_map.len());
         for (ssrc, audio_receive_stats) in audio_receive_stats_map {
-            let packets_per_second_stats = Stats {
+            let packets_per_second = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Packet Rate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.audio.receive.packet_rate.svg", client_name),
@@ -1138,10 +1122,10 @@ impl ClientLogReport {
                     y_label: "Packets/Second".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.packets_per_second,
+                data: audio_receive_stats.packets_per_second.data,
             };
 
-            let packet_loss_stats = Stats {
+            let packet_loss = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Packet Loss (ssrc={ssrc})"),
                     chart_name: format!("{}.log.audio.receive.loss.svg", client_name),
@@ -1149,10 +1133,10 @@ impl ClientLogReport {
                     y_label: "%".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.packet_loss,
+                data: audio_receive_stats.packet_loss.data,
             };
 
-            let bitrate_stats = Stats {
+            let bitrate = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Bitrate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.audio.receive.bitrate.svg", client_name),
@@ -1160,10 +1144,10 @@ impl ClientLogReport {
                     y_label: "Kbps".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.bitrate,
+                data: audio_receive_stats.bitrate.data,
             };
 
-            let jitter_stats = Stats {
+            let jitter = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Jitter (ssrc={ssrc})"),
                     chart_name: format!("{}.log.audio.receive.jitter.svg", client_name),
@@ -1171,10 +1155,10 @@ impl ClientLogReport {
                     y_label: "milliseconds".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.jitter,
+                data: audio_receive_stats.jitter.data,
             };
 
-            let audio_energy_stats = Stats {
+            let audio_energy = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Audio Energy (ssrc={ssrc})"),
                     chart_name: format!("{}.log.audio.receive.audio_energy.svg", client_name),
@@ -1183,10 +1167,10 @@ impl ClientLogReport {
                     y_max: Some(1.0),
                     ..Default::default()
                 },
-                data: audio_receive_stats.audio_energy,
+                data: audio_receive_stats.audio_energy.data,
             };
 
-            let jitter_buffer_delay_stats = Stats {
+            let jitter_buffer_delay = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Jitter Buffer Delay (ssrc={ssrc})"),
                     chart_name: format!(
@@ -1197,10 +1181,10 @@ impl ClientLogReport {
                     y_label: "milliseconds".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.jitter_buffer_delay,
+                data: audio_receive_stats.jitter_buffer_delay.data,
             };
 
-            let jitter_buffer_target_delay_stats = Stats {
+            let jitter_buffer_target_delay = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Jitter Buffer Target Delay (ssrc={ssrc})"),
                     chart_name: format!(
@@ -1211,10 +1195,10 @@ impl ClientLogReport {
                     y_label: "milliseconds".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.jitter_buffer_target_delay,
+                data: audio_receive_stats.jitter_buffer_target_delay.data,
             };
 
-            let jitter_buffer_flushes_stats = Stats {
+            let jitter_buffer_flushes = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Jitter Buffer Flushes (ssrc={ssrc})"),
                     chart_name: format!(
@@ -1226,10 +1210,10 @@ impl ClientLogReport {
                     show_total: true,
                     ..Default::default()
                 },
-                data: audio_receive_stats.jitter_buffer_flushes,
+                data: audio_receive_stats.jitter_buffer_flushes.data,
             };
 
-            let concealed_samples_pct_stats = Stats {
+            let concealed_samples_pct = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Concealed Samples (ssrc={ssrc})"),
                     chart_name: format!(
@@ -1240,10 +1224,10 @@ impl ClientLogReport {
                     y_label: "%".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.concealed_samples_pct,
+                data: audio_receive_stats.concealed_samples_pct.data,
             };
 
-            let fec_packets_received_stats = Stats {
+            let fec_packets_received = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive FEC Packets Received (ssrc={ssrc})"),
                     chart_name: format!(
@@ -1255,10 +1239,10 @@ impl ClientLogReport {
                     show_total: true,
                     ..Default::default()
                 },
-                data: audio_receive_stats.fec_packets_received,
+                data: audio_receive_stats.fec_packets_received.data,
             };
 
-            let relative_arrival_delay_per_packet_stats = Stats {
+            let relative_arrival_delay_per_packet = Stats {
                 config: StatsConfig {
                     title: format!("Audio Receive Relative Arrival Delay Per Packet (ssrc={ssrc})"),
                     chart_name: format!(
@@ -1269,28 +1253,28 @@ impl ClientLogReport {
                     y_label: "milliseconds".to_string(),
                     ..Default::default()
                 },
-                data: audio_receive_stats.relative_arrival_delay_per_packet,
+                data: audio_receive_stats.relative_arrival_delay_per_packet.data,
             };
 
             audio_receive_stats_list.push(AudioReceiveStats {
                 ssrc: audio_receive_stats.ssrc,
-                packets_per_second_stats,
-                packet_loss_stats,
-                bitrate_stats,
-                jitter_stats,
-                audio_energy_stats,
-                jitter_buffer_delay_stats,
-                jitter_buffer_target_delay_stats,
-                jitter_buffer_flushes_stats,
-                concealed_samples_pct_stats,
-                fec_packets_received_stats,
-                relative_arrival_delay_per_packet_stats,
+                packets_per_second,
+                packet_loss,
+                bitrate,
+                jitter,
+                audio_energy,
+                jitter_buffer_delay,
+                jitter_buffer_target_delay,
+                jitter_buffer_flushes,
+                concealed_samples_pct,
+                fec_packets_received,
+                relative_arrival_delay_per_packet,
             });
         }
 
         let mut video_receive_stats_list = Vec::with_capacity(video_receive_stats_map.len());
         for (ssrc, video_receive_stats) in video_receive_stats_map {
-            let packets_per_second_stats = Stats {
+            let packets_per_second = Stats {
                 config: StatsConfig {
                     title: format!("Video Receive Packet Rate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.receive.packet_rate.svg", client_name),
@@ -1298,10 +1282,10 @@ impl ClientLogReport {
                     y_label: "Packets/Second".to_string(),
                     ..Default::default()
                 },
-                data: video_receive_stats.packets_per_second,
+                data: video_receive_stats.packets_per_second.data,
             };
 
-            let packet_loss_stats = Stats {
+            let packet_loss = Stats {
                 config: StatsConfig {
                     title: format!("Video Receive Packet Loss (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.receive.loss.svg", client_name),
@@ -1309,10 +1293,10 @@ impl ClientLogReport {
                     y_label: "%".to_string(),
                     ..Default::default()
                 },
-                data: video_receive_stats.packet_loss,
+                data: video_receive_stats.packet_loss.data,
             };
 
-            let bitrate_stats = Stats {
+            let bitrate = Stats {
                 config: StatsConfig {
                     title: format!("Video Receive Bitrate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.receive.bitrate.svg", client_name),
@@ -1320,10 +1304,10 @@ impl ClientLogReport {
                     y_label: "Kbps".to_string(),
                     ..Default::default()
                 },
-                data: video_receive_stats.bitrate,
+                data: video_receive_stats.bitrate.data,
             };
 
-            let framerate_stats = Stats {
+            let framerate = Stats {
                 config: StatsConfig {
                     title: format!("Video Receive Framerate (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.receive.framerate.svg", client_name),
@@ -1332,10 +1316,10 @@ impl ClientLogReport {
                     y_max: Some(32.0),
                     ..Default::default()
                 },
-                data: video_receive_stats.framerate,
+                data: video_receive_stats.framerate.data,
             };
 
-            let key_frames_decoded_stats = Stats {
+            let key_frames_decoded = Stats {
                 config: StatsConfig {
                     title: format!("Video Key Frames Decoded (ssrc={ssrc})"),
                     chart_name: format!("{}.log.video.receive.key_frames_decoded.svg", client_name),
@@ -1343,7 +1327,7 @@ impl ClientLogReport {
                     y_label: "# frames".to_string(),
                     ..Default::default()
                 },
-                data: video_receive_stats.key_frames_decoded,
+                data: video_receive_stats.key_frames_decoded.data,
             };
 
             let resolution = Stats {
@@ -1354,49 +1338,49 @@ impl ClientLogReport {
                     y_label: "Resolution (sq. pixels)".to_string(),
                     ..Default::default()
                 },
-                data: video_receive_stats.resolution,
+                data: video_receive_stats.resolution.data,
             };
 
             video_receive_stats_list.push(VideoReceiveStats {
                 ssrc: video_receive_stats.ssrc,
-                packets_per_second_stats,
-                packet_loss_stats,
-                bitrate_stats,
-                framerate_stats,
-                key_frames_decoded_stats,
+                packets_per_second,
+                packet_loss,
+                bitrate,
+                framerate,
+                key_frames_decoded,
                 resolution,
             });
         }
 
-        let bitrate_stats = Stats {
+        let bitrate = Stats {
             config: StatsConfig {
                 title: "Adaptation Bitrate Changes".to_string(),
                 chart_name: format!("{}.audio.adaptation.bitrate.svg", client_name),
                 x_label: "Test Seconds".to_string(),
                 y_label: "Kbps".to_string(),
-                x_max: Some(audio_adaptation.bitrate.max_index + 5.0),
+                x_max: Some(audio_adaptation.bitrate.data.max_index + 5.0),
                 line_shape: LineShape::Hv,
                 ..Default::default()
             },
-            data: audio_adaptation.bitrate,
+            data: audio_adaptation.bitrate.data,
         };
 
-        let packet_length_stats = Stats {
+        let packet_length = Stats {
             config: StatsConfig {
                 title: "Adaptation Packet Length Changes".to_string(),
                 chart_name: format!("{}.audio.adaptation.packet_length.svg", client_name),
                 x_label: "Test Seconds".to_string(),
                 y_label: "milliseconds".to_string(),
-                x_max: Some(audio_adaptation.packet_length.max_index + 5.0),
+                x_max: Some(audio_adaptation.packet_length.data.max_index + 5.0),
                 line_shape: LineShape::Hv,
                 ..Default::default()
             },
-            data: audio_adaptation.packet_length,
+            data: audio_adaptation.packet_length.data,
         };
 
         let audio_adaptation = AudioAdaptation {
-            bitrate_stats,
-            packet_length_stats,
+            bitrate,
+            packet_length,
         };
 
         Ok(Self {
@@ -1646,61 +1630,61 @@ impl Report {
             &self.docker_stats_report.mem_usage,
             &self.docker_stats_report.tx_bitrate,
             &self.docker_stats_report.rx_bitrate,
-            &connection_stats.current_round_trip_time_stats,
-            &connection_stats.available_outgoing_bitrate_stats,
-            &audio_send_stats.packets_per_second_stats,
-            &audio_send_stats.average_packet_size_stats,
-            &audio_send_stats.bitrate_stats,
-            &audio_send_stats.remote_packet_loss_stats,
-            &audio_send_stats.remote_jitter_stats,
-            &audio_send_stats.remote_round_trip_time_stats,
-            &audio_send_stats.audio_energy_stats,
-            &audio_adaptation.bitrate_stats,
-            &audio_adaptation.packet_length_stats,
+            &connection_stats.current_round_trip_time,
+            &connection_stats.available_outgoing_bitrate,
+            &audio_send_stats.packets_per_second,
+            &audio_send_stats.average_packet_size,
+            &audio_send_stats.bitrate,
+            &audio_send_stats.remote_packet_loss,
+            &audio_send_stats.remote_jitter,
+            &audio_send_stats.remote_round_trip_time,
+            &audio_send_stats.audio_energy,
+            &audio_adaptation.bitrate,
+            &audio_adaptation.packet_length,
         ];
         line_chart_stats.extend(audio_receive_stats.iter().flat_map(|per_ssrc| {
             vec![
-                &per_ssrc.packets_per_second_stats,
-                &per_ssrc.packet_loss_stats,
-                &per_ssrc.bitrate_stats,
-                &per_ssrc.jitter_stats,
-                &per_ssrc.audio_energy_stats,
-                &per_ssrc.jitter_buffer_delay_stats,
-                &per_ssrc.jitter_buffer_target_delay_stats,
-                &per_ssrc.jitter_buffer_flushes_stats,
-                &per_ssrc.concealed_samples_pct_stats,
-                &per_ssrc.fec_packets_received_stats,
-                &per_ssrc.relative_arrival_delay_per_packet_stats,
+                &per_ssrc.packets_per_second,
+                &per_ssrc.packet_loss,
+                &per_ssrc.bitrate,
+                &per_ssrc.jitter,
+                &per_ssrc.audio_energy,
+                &per_ssrc.jitter_buffer_delay,
+                &per_ssrc.jitter_buffer_target_delay,
+                &per_ssrc.jitter_buffer_flushes,
+                &per_ssrc.concealed_samples_pct,
+                &per_ssrc.fec_packets_received,
+                &per_ssrc.relative_arrival_delay_per_packet,
             ]
         }));
 
         if self.show_video {
             line_chart_stats.extend(video_send_stats.iter().flat_map(|per_ssrc| {
                 vec![
-                    &per_ssrc.packets_per_second_stats,
-                    &per_ssrc.average_packet_size_stats,
-                    &per_ssrc.bitrate_stats,
-                    &per_ssrc.framerate_stats,
-                    &per_ssrc.key_frames_encoded_stats,
-                    &per_ssrc.retransmitted_packets_sent_stats,
-                    &per_ssrc.retransmitted_bitrate_stats,
-                    &per_ssrc.send_delay_per_packet_stats,
-                    &per_ssrc.nack_count_stats,
-                    &per_ssrc.pli_count_stats,
-                    &per_ssrc.remote_packet_loss_stats,
-                    &per_ssrc.remote_jitter_stats,
-                    &per_ssrc.remote_round_trip_time_stats,
+                    &per_ssrc.packets_per_second,
+                    &per_ssrc.average_packet_size,
+                    &per_ssrc.bitrate,
+                    &per_ssrc.framerate,
+                    &per_ssrc.key_frames_encoded,
+                    &per_ssrc.retransmitted_packets_sent,
+                    &per_ssrc.retransmitted_bitrate,
+                    &per_ssrc.send_delay_per_packet,
+                    &per_ssrc.nack_count,
+                    &per_ssrc.pli_count,
+                    &per_ssrc.remote_packet_loss,
+                    &per_ssrc.remote_jitter,
+                    &per_ssrc.remote_round_trip_time,
                     &per_ssrc.resolution,
                 ]
             }));
 
             line_chart_stats.extend(video_receive_stats.iter().flat_map(|per_ssrc| {
                 vec![
-                    &per_ssrc.packets_per_second_stats,
-                    &per_ssrc.packet_loss_stats,
-                    &per_ssrc.bitrate_stats,
-                    &per_ssrc.framerate_stats,
-                    &per_ssrc.key_frames_decoded_stats,
+                    &per_ssrc.packets_per_second,
+                    &per_ssrc.packet_loss,
+                    &per_ssrc.bitrate,
+                    &per_ssrc.framerate,
+                    &per_ssrc.key_frames_decoded,
                     &per_ssrc.resolution,
                 ]
             }));
@@ -1850,10 +1834,7 @@ impl Report {
             let audio_adaptation = &self.client_log_report.audio_adaptation;
             let audio_adaptation = Self::build_stats_rows(
                 &html,
-                &[
-                    &audio_adaptation.bitrate_stats,
-                    &audio_adaptation.packet_length_stats,
-                ],
+                &[&audio_adaptation.bitrate, &audio_adaptation.packet_length],
             );
             buf.extend_from_slice(
                 html.accordion_section(
@@ -1872,8 +1853,8 @@ impl Report {
         let connection_stats = Self::build_stats_rows(
             &html,
             &[
-                &connection_stats.current_round_trip_time_stats,
-                &connection_stats.available_outgoing_bitrate_stats,
+                &connection_stats.current_round_trip_time,
+                &connection_stats.available_outgoing_bitrate,
             ],
         );
         buf.extend_from_slice(
@@ -1892,13 +1873,13 @@ impl Report {
         let audio_send_stats_body = Self::build_stats_rows(
             &html,
             &[
-                &audio_send_stats.packets_per_second_stats,
-                &audio_send_stats.average_packet_size_stats,
-                &audio_send_stats.bitrate_stats,
-                &audio_send_stats.remote_packet_loss_stats,
-                &audio_send_stats.remote_jitter_stats,
-                &audio_send_stats.remote_round_trip_time_stats,
-                &audio_send_stats.audio_energy_stats,
+                &audio_send_stats.packets_per_second,
+                &audio_send_stats.average_packet_size,
+                &audio_send_stats.bitrate,
+                &audio_send_stats.remote_packet_loss,
+                &audio_send_stats.remote_jitter,
+                &audio_send_stats.remote_round_trip_time,
+                &audio_send_stats.audio_energy,
             ],
         );
         buf.extend_from_slice(
@@ -1918,17 +1899,17 @@ impl Report {
             let audio_receive_stats = Self::build_stats_rows(
                 &html,
                 &[
-                    &audio_receive_stats.packets_per_second_stats,
-                    &audio_receive_stats.packet_loss_stats,
-                    &audio_receive_stats.bitrate_stats,
-                    &audio_receive_stats.jitter_stats,
-                    &audio_receive_stats.jitter_buffer_delay_stats,
-                    &audio_receive_stats.jitter_buffer_target_delay_stats,
-                    &audio_receive_stats.jitter_buffer_flushes_stats,
-                    &audio_receive_stats.audio_energy_stats,
-                    &audio_receive_stats.concealed_samples_pct_stats,
-                    &audio_receive_stats.fec_packets_received_stats,
-                    &audio_receive_stats.relative_arrival_delay_per_packet_stats,
+                    &audio_receive_stats.packets_per_second,
+                    &audio_receive_stats.packet_loss,
+                    &audio_receive_stats.bitrate,
+                    &audio_receive_stats.jitter,
+                    &audio_receive_stats.jitter_buffer_delay,
+                    &audio_receive_stats.jitter_buffer_target_delay,
+                    &audio_receive_stats.jitter_buffer_flushes,
+                    &audio_receive_stats.audio_energy,
+                    &audio_receive_stats.concealed_samples_pct,
+                    &audio_receive_stats.fec_packets_received,
+                    &audio_receive_stats.relative_arrival_delay_per_packet,
                 ],
             );
             buf.extend_from_slice(
@@ -1950,19 +1931,19 @@ impl Report {
                 let video_send_stats = Self::build_stats_rows(
                     &html,
                     &[
-                        &video_send_stats.packets_per_second_stats,
-                        &video_send_stats.average_packet_size_stats,
-                        &video_send_stats.bitrate_stats,
-                        &video_send_stats.framerate_stats,
-                        &video_send_stats.key_frames_encoded_stats,
-                        &video_send_stats.retransmitted_packets_sent_stats,
-                        &video_send_stats.retransmitted_bitrate_stats,
-                        &video_send_stats.send_delay_per_packet_stats,
-                        &video_send_stats.nack_count_stats,
-                        &video_send_stats.pli_count_stats,
-                        &video_send_stats.remote_packet_loss_stats,
-                        &video_send_stats.remote_jitter_stats,
-                        &video_send_stats.remote_round_trip_time_stats,
+                        &video_send_stats.packets_per_second,
+                        &video_send_stats.average_packet_size,
+                        &video_send_stats.bitrate,
+                        &video_send_stats.framerate,
+                        &video_send_stats.key_frames_encoded,
+                        &video_send_stats.retransmitted_packets_sent,
+                        &video_send_stats.retransmitted_bitrate,
+                        &video_send_stats.send_delay_per_packet,
+                        &video_send_stats.nack_count,
+                        &video_send_stats.pli_count,
+                        &video_send_stats.remote_packet_loss,
+                        &video_send_stats.remote_jitter,
+                        &video_send_stats.remote_round_trip_time,
                     ],
                 );
 
@@ -1984,11 +1965,11 @@ impl Report {
                 let video_receive_stats = Self::build_stats_rows(
                     &html,
                     &[
-                        &video_receive_stats.packets_per_second_stats,
-                        &video_receive_stats.packet_loss_stats,
-                        &video_receive_stats.bitrate_stats,
-                        &video_receive_stats.framerate_stats,
-                        &video_receive_stats.key_frames_decoded_stats,
+                        &video_receive_stats.packets_per_second,
+                        &video_receive_stats.packet_loss,
+                        &video_receive_stats.bitrate,
+                        &video_receive_stats.framerate,
+                        &video_receive_stats.key_frames_decoded,
                     ],
                 );
 
@@ -2069,7 +2050,7 @@ impl Report {
                 report
                     .client_log_report
                     .connection_stats
-                    .current_round_trip_time_stats
+                    .current_round_trip_time
                     .data
                     .ave
             }
@@ -2077,7 +2058,7 @@ impl Report {
                 report
                     .client_log_report
                     .connection_stats
-                    .available_outgoing_bitrate_stats
+                    .available_outgoing_bitrate
                     .data
                     .ave
             }
@@ -2085,7 +2066,7 @@ impl Report {
                 report
                     .client_log_report
                     .audio_send_stats
-                    .packets_per_second_stats
+                    .packets_per_second
                     .data
                     .ave
             }
@@ -2093,23 +2074,18 @@ impl Report {
                 report
                     .client_log_report
                     .audio_send_stats
-                    .average_packet_size_stats
+                    .average_packet_size
                     .data
                     .ave
             }
             ChartDimension::AudioSendBitrate => {
-                report
-                    .client_log_report
-                    .audio_send_stats
-                    .bitrate_stats
-                    .data
-                    .ave
+                report.client_log_report.audio_send_stats.bitrate.data.ave
             }
             ChartDimension::AudioSendRemotePacketLoss => {
                 report
                     .client_log_report
                     .audio_send_stats
-                    .remote_packet_loss_stats
+                    .remote_packet_loss
                     .data
                     .ave
             }
@@ -2117,7 +2093,7 @@ impl Report {
                 report
                     .client_log_report
                     .audio_send_stats
-                    .remote_jitter_stats
+                    .remote_jitter
                     .data
                     .ave
             }
@@ -2125,7 +2101,7 @@ impl Report {
                 report
                     .client_log_report
                     .audio_send_stats
-                    .remote_round_trip_time_stats
+                    .remote_round_trip_time
                     .data
                     .ave
             }
@@ -2133,7 +2109,7 @@ impl Report {
                 report
                     .client_log_report
                     .audio_send_stats
-                    .audio_energy_stats
+                    .audio_energy
                     .data
                     .ave
             }
@@ -2142,7 +2118,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.packets_per_second_stats.data.ave)
+                    .map(|stats| stats.packets_per_second.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceivePacketLoss => average(
@@ -2150,7 +2126,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.packet_loss_stats.data.ave)
+                    .map(|stats| stats.packet_loss.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceiveBitrate => average(
@@ -2158,7 +2134,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.bitrate_stats.data.ave)
+                    .map(|stats| stats.bitrate.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceiveJitter => average(
@@ -2166,7 +2142,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.jitter_stats.data.ave)
+                    .map(|stats| stats.jitter.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceiveAudioEnergy => average(
@@ -2174,7 +2150,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.audio_energy_stats.data.ave)
+                    .map(|stats| stats.audio_energy.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceiveJitterBufferDelay => average(
@@ -2182,7 +2158,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.jitter_buffer_delay_stats.data.ave)
+                    .map(|stats| stats.jitter_buffer_delay.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceiveJitterBufferTargetDelay => average(
@@ -2190,7 +2166,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.jitter_buffer_target_delay_stats.data.ave)
+                    .map(|stats| stats.jitter_buffer_target_delay.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceiveConcealedSamplesPct => average(
@@ -2198,7 +2174,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.concealed_samples_pct_stats.data.ave)
+                    .map(|stats| stats.concealed_samples_pct.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::AudioReceiveFecPacketsReceived => average(
@@ -2206,7 +2182,7 @@ impl Report {
                     .client_log_report
                     .audio_receive_stats_list
                     .iter()
-                    .map(|stats| stats.fec_packets_received_stats.data.ave)
+                    .map(|stats| stats.fec_packets_received.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendPacketsPerSecond => average(
@@ -2214,7 +2190,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.packets_per_second_stats.data.ave)
+                    .map(|stats| stats.packets_per_second.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendPacketSize => average(
@@ -2222,7 +2198,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.average_packet_size_stats.data.ave)
+                    .map(|stats| stats.average_packet_size.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendBitrate => average(
@@ -2230,7 +2206,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.bitrate_stats.data.ave)
+                    .map(|stats| stats.bitrate.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendFramerate => average(
@@ -2238,7 +2214,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.framerate_stats.data.ave)
+                    .map(|stats| stats.framerate.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendKeyFramesEncoded => average(
@@ -2246,7 +2222,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.key_frames_encoded_stats.data.ave)
+                    .map(|stats| stats.key_frames_encoded.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendRetransmittedPacketsSent => average(
@@ -2254,7 +2230,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.retransmitted_packets_sent_stats.data.ave)
+                    .map(|stats| stats.retransmitted_packets_sent.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendRetransmittedBitrate => average(
@@ -2262,7 +2238,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.retransmitted_bitrate_stats.data.ave)
+                    .map(|stats| stats.retransmitted_bitrate.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendDelayPerPacket => average(
@@ -2270,7 +2246,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.send_delay_per_packet_stats.data.ave)
+                    .map(|stats| stats.send_delay_per_packet.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendNackCount => average(
@@ -2278,7 +2254,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.nack_count_stats.data.ave)
+                    .map(|stats| stats.nack_count.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendPliCount => average(
@@ -2286,7 +2262,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.pli_count_stats.data.ave)
+                    .map(|stats| stats.pli_count.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendRemotePacketLoss => average(
@@ -2294,7 +2270,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.remote_packet_loss_stats.data.ave)
+                    .map(|stats| stats.remote_packet_loss.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendRemoteJitter => average(
@@ -2302,7 +2278,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.remote_jitter_stats.data.ave)
+                    .map(|stats| stats.remote_jitter.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoSendRemoteRoundTripTime => average(
@@ -2310,7 +2286,7 @@ impl Report {
                     .client_log_report
                     .video_send_stats
                     .iter()
-                    .map(|stats| stats.remote_round_trip_time_stats.data.ave)
+                    .map(|stats| stats.remote_round_trip_time.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoReceivePacketsPerSecond => average(
@@ -2318,7 +2294,7 @@ impl Report {
                     .client_log_report
                     .video_receive_stats_list
                     .iter()
-                    .map(|stats| stats.packets_per_second_stats.data.ave)
+                    .map(|stats| stats.packets_per_second.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoReceivePacketLoss => average(
@@ -2326,7 +2302,7 @@ impl Report {
                     .client_log_report
                     .video_receive_stats_list
                     .iter()
-                    .map(|stats| stats.packet_loss_stats.data.ave)
+                    .map(|stats| stats.packet_loss.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoReceiveBitrate => average(
@@ -2334,7 +2310,7 @@ impl Report {
                     .client_log_report
                     .video_receive_stats_list
                     .iter()
-                    .map(|stats| stats.bitrate_stats.data.ave)
+                    .map(|stats| stats.bitrate.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoReceiveFramerate => average(
@@ -2342,7 +2318,7 @@ impl Report {
                     .client_log_report
                     .video_receive_stats_list
                     .iter()
-                    .map(|stats| stats.framerate_stats.data.ave)
+                    .map(|stats| stats.framerate.data.ave)
                     .collect_vec(),
             ),
             ChartDimension::VideoReceiveKeyFramesDecoded => average(
@@ -2350,7 +2326,7 @@ impl Report {
                     .client_log_report
                     .video_receive_stats_list
                     .iter()
-                    .map(|stats| stats.key_frames_decoded_stats.data.ave)
+                    .map(|stats| stats.key_frames_decoded.data.ave)
                     .collect_vec(),
             ),
         }
@@ -2552,6 +2528,7 @@ struct SummaryRow {
     pub audio_receive_packet_rate: f32,
     pub audio_receive_bitrate: f32,
     pub audio_receive_loss: f32,
+    pub audio_receive_loss_std_dev: f32,
     pub concealed_samples_pct: f32,
     pub fec_packets_received_total: f32,
 
@@ -2584,43 +2561,41 @@ impl SummaryRow {
             audio_receive_packet_rate,
             audio_receive_bitrate,
             audio_receive_loss,
+            audio_receive_loss_std_dev,
             concealed_samples_pct,
             fec_packets_received_total,
         ) = report
             .client_log_report
             .audio_receive_stats_list
             .iter()
-            .fold((0.0, 0.0, 0.0, 0.0, 0.0), |acc, stats| {
+            .fold((0.0, 0.0, 0.0, 0.0, 0.0, 0.0), |acc, stats| {
                 (
-                    acc.0 + stats.packets_per_second_stats.data.ave,
-                    acc.1 + stats.bitrate_stats.data.ave,
-                    acc.2 + stats.packet_loss_stats.data.ave,
-                    acc.3 + stats.concealed_samples_pct_stats.data.ave,
-                    acc.4 + stats.fec_packets_received_stats.data.total,
+                    acc.0 + stats.packets_per_second.data.ave,
+                    acc.1 + stats.bitrate.data.ave,
+                    acc.2 + stats.packet_loss.data.ave,
+                    acc.3 + stats.packet_loss.data.std_dev,
+                    acc.4 + stats.concealed_samples_pct.data.ave,
+                    acc.5 + stats.fec_packets_received.data.total,
                 )
             });
         Self {
             audio_send_packet_size: report
                 .client_log_report
                 .audio_send_stats
-                .average_packet_size_stats
+                .average_packet_size
                 .data
                 .ave,
             audio_send_packet_rate: report
                 .client_log_report
                 .audio_send_stats
-                .packets_per_second_stats
+                .packets_per_second
                 .data
                 .ave,
-            audio_send_bitrate: report
-                .client_log_report
-                .audio_send_stats
-                .bitrate_stats
-                .data
-                .ave,
+            audio_send_bitrate: report.client_log_report.audio_send_stats.bitrate.data.ave,
             audio_receive_packet_rate,
             audio_receive_bitrate,
             audio_receive_loss,
+            audio_receive_loss_std_dev,
             concealed_samples_pct,
             fec_packets_received_total: fec_packets_received_total as f32,
             container_cpu: report.docker_stats_report.cpu_usage.data.ave,
@@ -2661,7 +2636,7 @@ impl SummaryRow {
                 .client_log_report
                 .video_send_stats
                 .first()
-                .map(|s| s.framerate_stats.data.ave)
+                .map(|s| s.framerate.data.ave)
                 .unwrap_or(0.0),
             video_recv_resolution: report
                 .client_log_report
@@ -2673,7 +2648,7 @@ impl SummaryRow {
                 .client_log_report
                 .video_receive_stats_list
                 .first()
-                .map(|s| s.framerate_stats.data.ave)
+                .map(|s| s.framerate.data.ave)
                 .unwrap_or(0.0),
         }
     }
@@ -2708,6 +2683,10 @@ impl SummaryRow {
             self.audio_receive_bitrate =
                 new_average(self.audio_receive_bitrate, new.audio_receive_bitrate);
             self.audio_receive_loss = new_average(self.audio_receive_loss, new.audio_receive_loss);
+            self.audio_receive_loss_std_dev = new_average(
+                self.audio_receive_loss_std_dev,
+                new.audio_receive_loss_std_dev,
+            );
             self.concealed_samples_pct =
                 new_average(self.concealed_samples_pct, new.concealed_samples_pct);
             self.fec_packets_received_total = new_average(
@@ -3155,6 +3134,9 @@ impl Html {
             buf.push_str("<div class=\"col-md-2\">\n");
             let _ = writeln!(buf, "ave: {:.3}", stats.data.ave);
             buf.push_str("</div>\n");
+            buf.push_str("<div class=\"col-md-2\">\n");
+            let _ = writeln!(buf, "std_dev: {:.3}", stats.data.std_dev);
+            buf.push_str("</div>\n");
             if stats.config.show_total {
                 buf.push_str("<div class=\"col-md-2\">\n");
                 let _ = writeln!(buf, "tot: {:.0}", stats.data.total);
@@ -3378,6 +3360,18 @@ impl Html {
                 indent, summary_row.audio_receive_loss
             );
 
+            // Coefficient of variation of the loss (stddev / mean). Only meaningful when
+            // there is some loss to measure.
+            let loss_cv = if summary_row.audio_receive_loss > 0.0 {
+                format!(
+                    "{:.2}",
+                    summary_row.audio_receive_loss_std_dev / summary_row.audio_receive_loss
+                )
+            } else {
+                "N/A".to_string()
+            };
+            let _ = writeln!(buf, "<td>{}{}</td>", indent, loss_cv);
+
             if group_config.summary_report_columns.show_video {
                 let _ = writeln!(
                     buf,
@@ -3391,16 +3385,24 @@ impl Html {
                     indent, summary_row.video_recv_framerate
                 );
             }
-        }
 
-        if group_config.summary_report_columns.show_receive_stats
-            && group_config.summary_report_columns.show_dred_stats
-        {
             let _ = writeln!(
                 buf,
                 "<td>{}{:.2}</td>",
                 indent, summary_row.concealed_samples_pct
             );
+
+            // Concealment per unit of loss (mean concealment / mean loss).
+            let concealment_per_loss = if summary_row.audio_receive_loss >= 0.5 {
+                format!(
+                    "{:.2}",
+                    summary_row.concealed_samples_pct / summary_row.audio_receive_loss
+                )
+            } else {
+                "N/A".to_string()
+            };
+            let _ = writeln!(buf, "<td>{}{}</td>", indent, concealment_per_loss);
+
             let _ = writeln!(
                 buf,
                 "<td>{}{:.0}</td>",
@@ -3512,14 +3514,10 @@ impl Html {
             );
         }
         if group_config.summary_report_columns.show_receive_stats {
-            let recv_colspan = match (
-                group_config.summary_report_columns.show_video,
-                group_config.summary_report_columns.show_dred_stats,
-            ) {
-                (true, true) => 7,
-                (true, false) => 5,
-                (false, true) => 5,
-                (false, false) => 3,
+            let recv_colspan = if group_config.summary_report_columns.show_video {
+                9
+            } else {
+                7
             };
             let _ = writeln!(
                 buf,
@@ -3580,14 +3578,14 @@ impl Html {
             buf.push_str("<th>Packet Rate</th>\n");
             buf.push_str("<th>Bitrate</th>\n");
             buf.push_str("<th>Loss</th>\n");
+            buf.push_str("<th>CV</th>\n");
             if group_config.summary_report_columns.show_video {
                 buf.push_str("<th>Resolution</th>\n");
                 buf.push_str("<th>Framerate</th>\n");
             }
-            if group_config.summary_report_columns.show_dred_stats {
-                buf.push_str("<th>Concealed</th>\n");
-                buf.push_str("<th>FEC</th>\n");
-            }
+            buf.push_str("<th>Cncl Rate</th>\n");
+            buf.push_str("<th>Cncl /Loss</th>\n");
+            buf.push_str("<th>FEC</th>\n");
         }
 
         buf.push_str("<th>CPU</th>\n");
