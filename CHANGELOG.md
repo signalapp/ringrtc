@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.69.7
+
+- Update WebRTC version to 7871a (m150)
+
+- Call Sim
+  - Stats refinements and dred stats refactor
+  - Update linux container version of audio scripts
+
+- Remove pull_request_target trigger from reviewers workflow
+
+- Add auto-assign assignees to CI
+
+- Update to Event::wait_or_throw to make test failures explicit
+
+- Warn if webrtc.version isn't in webrtc checkout
+
 ## v2.69.6
 
 - Remove provenance from npm publish that breaks release
