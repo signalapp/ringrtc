@@ -7,6 +7,9 @@
 
 set -e
 
+# OK if the source checkout is outdated -- we're just fetching a prebuild
+ENV_SH_SKIP_WEBRTC_VERSION_CHECK=1
+
 # shellcheck source=bin/env.sh
 . "$(dirname "$0")"/env.sh
 
