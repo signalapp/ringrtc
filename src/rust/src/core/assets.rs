@@ -19,6 +19,8 @@ use crate::{
 /// Asset loading and verification errors
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum AssetError {
+    #[error("Manifest has disabled asset")]
+    DisabledAsset,
     #[error("unknown asset_group {0}")]
     UnsupportedAsset(String),
     #[error("failed to read asset file '{0}' due to '{1}'")]
@@ -35,6 +37,12 @@ pub enum AssetError {
 
     #[error("Asset already registered with version '{0}' for asset group '{1}'")]
     AssetAlreadyRegistered(SemanticVersion, String),
+}
+
+#[derive(Debug)]
+pub struct AssetManifestEntry {
+    pub metadata: AssetMetadata,
+    pub disabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,14 +94,14 @@ pub enum AssetHandle {
 #[derive(Debug)]
 pub struct AssetManager {
     /// Metadata manifest used by the asset manager to verify added assets are supported.
-    supported_assets: Vec<AssetMetadata>,
+    manifest: Vec<AssetManifestEntry>,
     registry: AssetRegistry,
 }
 
 impl AssetManager {
-    pub fn new(supported_assets: Vec<AssetMetadata>) -> Self {
+    pub fn new(manifest: Vec<AssetManifestEntry>) -> Self {
         Self {
-            supported_assets,
+            manifest,
             registry: AssetRegistry::default(),
         }
     }
@@ -138,29 +146,35 @@ impl AssetManager {
     }
 
     /// Gets all [AssetMetadata] related to [asset_group]
-    fn supported_versions(&self, asset_group: &str) -> Vec<&AssetMetadata> {
-        self.supported_assets
+    fn supported_versions(&self, asset_group: &str) -> Vec<&AssetManifestEntry> {
+        self.manifest
             .iter()
-            .filter(|metadata| metadata.asset_group == asset_group)
+            .filter(|entry| entry.metadata.asset_group == asset_group)
             .collect()
     }
 
     fn verify_asset(
         asset_group: &str,
-        supported_versions: &[&AssetMetadata],
+        supported_versions: &[&AssetManifestEntry],
         content: &mut Vec<u8>,
     ) -> Result<AssetMetadata, AssetError> {
-        for metadata in supported_versions {
-            let expected_size = metadata.size_bytes as usize;
+        for &entry in supported_versions {
+            let expected_size = entry.metadata.size_bytes as usize;
             if content.len() < expected_size {
                 continue;
             }
 
             let content_hash = Sha512::digest(&content[..expected_size]);
-            if content_hash[..] == metadata.sha512_hash[..] {
-                content.truncate(expected_size);
-                return Ok((*metadata).clone());
+            if content_hash[..] != entry.metadata.sha512_hash[..] {
+                continue;
             }
+
+            if entry.disabled {
+                return Err(AssetError::DisabledAsset);
+            }
+
+            content.truncate(expected_size);
+            return Ok(entry.metadata.clone());
         }
 
         Err(AssetError::InvalidAssetPayload {
@@ -249,33 +263,20 @@ impl AssetRegistry {
     }
 }
 
-#[cfg(feature = "sim")]
 pub mod manifest {
-    use crate::protobuf::assets::AssetMetadata;
+    use crate::{core::assets::AssetManifestEntry, protobuf::assets::AssetMetadata};
 
-    pub fn supported_assets() -> Vec<AssetMetadata> {
-        vec![]
-    }
-}
-
-#[cfg(not(feature = "sim"))]
-pub mod manifest {
-    use crate::protobuf::assets::AssetMetadata;
-
-    #[cfg(not(target_pointer_width = "32"))]
-    pub fn supported_assets() -> Vec<AssetMetadata> {
+    pub fn supported_assets() -> Vec<AssetManifestEntry> {
         use hex_literal::hex;
-        vec![AssetMetadata {
-            asset_group: "opus-dred".to_string(),
-            version: "0.0.1".to_string(),
-            size_bytes: 1998208,
-            sha512_hash: hex!("b1d7e975bfeedf08937c1af6b34831d4b257ea38a2e2daaec9ac7f5014e14c6593117c8e0922a3626615fbdb4a41970ef90d41d517a81925b755bbf378c18a69").to_vec(),
+        vec![AssetManifestEntry {
+            metadata: AssetMetadata {
+                asset_group: "opus-dred".to_string(),
+                version: "0.0.1".to_string(),
+                size_bytes: 1998208,
+                sha512_hash: hex!("b1d7e975bfeedf08937c1af6b34831d4b257ea38a2e2daaec9ac7f5014e14c6593117c8e0922a3626615fbdb4a41970ef90d41d517a81925b755bbf378c18a69").to_vec(),
+            },
+            disabled: cfg!(any(feature = "sim", target_pointer_width = "32"))
         }]
-    }
-
-    #[cfg(target_pointer_width = "32")]
-    pub fn supported_assets() -> Vec<AssetMetadata> {
-        vec![]
     }
 }
 
@@ -286,6 +287,24 @@ mod tests {
     use super::*;
 
     const TEST_ASSET_GROUP: &str = "test-asset";
+
+    fn make_ignored_manifest_entry(
+        asset_group: &str,
+        version: &str,
+        content: &[u8],
+    ) -> AssetManifestEntry {
+        AssetManifestEntry {
+            metadata: make_metadata(asset_group, version, content),
+            disabled: true,
+        }
+    }
+
+    fn make_manifest_entry(asset_group: &str, version: &str, content: &[u8]) -> AssetManifestEntry {
+        AssetManifestEntry {
+            metadata: make_metadata(asset_group, version, content),
+            disabled: false,
+        }
+    }
 
     fn make_metadata(asset_group: &str, version: &str, content: &[u8]) -> AssetMetadata {
         AssetMetadata {
@@ -299,14 +318,18 @@ mod tests {
     #[test]
     fn test_supported_versions() {
         let manager = AssetManager::new(vec![
-            make_metadata(TEST_ASSET_GROUP, "0.0.1", b"content_a"),
-            make_metadata(TEST_ASSET_GROUP, "0.0.2", b"content_b"),
-            make_metadata("other-asset", "0.0.1", b"content_c"),
+            make_manifest_entry(TEST_ASSET_GROUP, "0.0.1", b"content_a"),
+            make_manifest_entry(TEST_ASSET_GROUP, "0.0.2", b"content_b"),
+            make_manifest_entry("other-asset", "0.0.1", b"content_c"),
         ]);
 
         let versions = manager.supported_versions(TEST_ASSET_GROUP);
         assert_eq!(versions.len(), 2);
-        assert!(versions.iter().all(|m| m.asset_group == TEST_ASSET_GROUP));
+        assert!(
+            versions
+                .iter()
+                .all(|m| m.metadata.asset_group == TEST_ASSET_GROUP)
+        );
 
         let other = manager.supported_versions("other-asset");
         assert_eq!(other.len(), 1);
@@ -317,7 +340,8 @@ mod tests {
 
     #[test]
     fn test_add_unsupported_asset() {
-        let mut manager = AssetManager::new(vec![make_metadata("other-asset", "0.0.1", b"data")]);
+        let mut manager =
+            AssetManager::new(vec![make_manifest_entry("other-asset", "0.0.1", b"data")]);
 
         let result =
             manager.add_asset_for_feature(TEST_ASSET_GROUP, AssetHandle::Content(b"data".to_vec()));
@@ -336,9 +360,33 @@ mod tests {
     }
 
     #[test]
+    fn test_add_disabled_asset() {
+        let mut manager = AssetManager::new(vec![make_ignored_manifest_entry(
+            TEST_ASSET_GROUP,
+            "0.0.1",
+            b"data",
+        )]);
+
+        let result =
+            manager.add_asset_for_feature(TEST_ASSET_GROUP, AssetHandle::Content(b"data".to_vec()));
+
+        assert!(matches!(result, Err(AssetError::DisabledAsset)));
+
+        let registry = manager.get_registry();
+        assert_eq!(
+            registry.assets.read().expect("got lock").len(),
+            0,
+            "registry is empty"
+        )
+    }
+
+    #[test]
     fn test_failed_to_read_asset_file() {
-        let mut manager =
-            AssetManager::new(vec![make_metadata(TEST_ASSET_GROUP, "0.0.1", b"data")]);
+        let mut manager = AssetManager::new(vec![make_manifest_entry(
+            TEST_ASSET_GROUP,
+            "0.0.1",
+            b"data",
+        )]);
 
         let result = manager.add_asset_for_feature(
             TEST_ASSET_GROUP,
@@ -360,7 +408,7 @@ mod tests {
 
     #[test]
     fn test_invalid_asset_payload() {
-        let mut manager = AssetManager::new(vec![make_metadata(
+        let mut manager = AssetManager::new(vec![make_manifest_entry(
             TEST_ASSET_GROUP,
             "0.0.1",
             b"valid_content",
@@ -386,7 +434,7 @@ mod tests {
     #[test]
     fn test_asset_already_registered() {
         let content = b"valid_content";
-        let mut manager = AssetManager::new(vec![make_metadata(
+        let mut manager = AssetManager::new(vec![make_manifest_entry(
             TEST_ASSET_GROUP,
             "0.0.1",
             content.as_slice(),
@@ -422,8 +470,16 @@ mod tests {
             content: Arc::new(b"content2".to_vec()),
         };
 
-        let mut manager =
-            AssetManager::new(vec![asset_1.metadata.clone(), asset_2.metadata.clone()]);
+        let mut manager = AssetManager::new(vec![
+            AssetManifestEntry {
+                metadata: asset_1.metadata.clone(),
+                disabled: false,
+            },
+            AssetManifestEntry {
+                metadata: asset_2.metadata.clone(),
+                disabled: false,
+            },
+        ]);
 
         manager
             .add_asset_for_feature(
