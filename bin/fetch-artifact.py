@@ -10,10 +10,9 @@ import hashlib
 import json
 import os
 import platform
-import ssl
+import subprocess
 import sys
 import tarfile
-import urllib.request
 
 from typing import BinaryIO
 
@@ -115,32 +114,37 @@ def download_if_needed(archive_file: str, url: str, checksum: str, archive_dir: 
     except FileNotFoundError:
         pass
 
-    print("downloading {}...".format(archive_file), file=sys.stderr)
-    try:
-        with urllib.request.urlopen(url) as response:
-            digest = hashlib.sha256()
-            download_path = os.path.join(archive_dir, UNVERIFIED_DOWNLOAD_NAME)
-            f_download = open(download_path, 'w+b')
-            chunk = response.read1()
-            while chunk:
-                digest.update(chunk)
-                f_download.write(chunk)
-                chunk = response.read1()
-            assert digest.hexdigest() == checksum.lower(), "expected {}, actual {}".format(checksum.lower(), digest.hexdigest())
-            f_download.close()
-            os.replace(download_path, archive_path)
-            return open(archive_path, 'rb')
-    except (urllib.error.HTTPError, urllib.error.URLError) as e:
-        if isinstance(e.reason, ssl.SSLCertVerificationError):
-            # See:
-            #
-            # - https://stackoverflow.com/questions/27835619/urllib-and-ssl-certificate-verify-failed-error
-            # - https://stackoverflow.com/a/77491061
-            print("Failed to verify SSL certificate. Do you need to `pip install pip-system-certs`?", file=sys.stderr)
-        else:
-            print(e, e.filename, file=sys.stderr)
+    print("downloading {} with curl".format(archive_file), file=sys.stderr)
 
+    download_path = os.path.join(archive_dir, UNVERIFIED_DOWNLOAD_NAME)
+    try:
+        subprocess.run(
+            [
+                "curl",
+                "--fail",
+                "--location",
+                "--show-error",
+                "--silent",
+                "--retry", "3",
+                "--output", download_path,
+                url,
+            ],
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print("curl failed to download {} (exit {})".format(url, e.returncode), file=sys.stderr)
         sys.exit(1)
+
+    digest = hashlib.sha256()
+    with open(download_path, 'rb') as f_download:
+        chunk = f_download.read1()
+        while chunk:
+            digest.update(chunk)
+            chunk = f_download.read1()
+    assert digest.hexdigest() == checksum.lower(), "expected checksum {}, actual {}".format(checksum.lower(), digest.hexdigest())
+
+    os.replace(download_path, archive_path)
+    return open(archive_path, 'rb')
 
 
 def main() -> None:
