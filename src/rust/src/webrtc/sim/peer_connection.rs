@@ -167,6 +167,14 @@ pub unsafe fn Rust_createOffer(
 }
 
 #[allow(non_snake_case, clippy::missing_safety_doc)]
+pub unsafe fn Rust_createSendOnlyTransceiver(
+    _peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+) -> bool {
+    info!("Rust_createSendOnlyTransceiver():");
+    true
+}
+
+#[allow(non_snake_case, clippy::missing_safety_doc)]
 pub unsafe fn Rust_setLocalDescription(
     peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
     _ssd_observer: webrtc::ptr::BorrowedRc<RffiSetSessionDescriptionObserver>,

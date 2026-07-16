@@ -348,7 +348,8 @@ fn main() -> Result<()> {
             fast_accelerate: args.audio_jitter_buffer_fast_accelerate,
         },
         audio_rtcp_report_interval_ms: args.audio_rtcp_report_interval_ms,
-        enable_vp9: args.vp9,
+        enable_vp9_encode: args.vp9,
+        enable_vp9_decode: args.vp9,
     };
 
     let mut scenario = ScenarioManager::new()?;

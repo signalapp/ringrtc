@@ -288,6 +288,8 @@ pub fn random_received_offer(_prng: &Prng, age: Duration) -> signaling::Received
             ice_ufrag: None,
             ice_pwd: None,
             receive_video_codecs: vec![],
+            decode_only_video_codecs: vec![],
+            encode_only_video_codecs: vec![],
             max_bitrate_bps: None,
         },
     )
@@ -315,6 +317,8 @@ pub fn random_received_answer(
         ice_ufrag: None,
         ice_pwd: None,
         receive_video_codecs: vec![],
+        decode_only_video_codecs: vec![],
+        encode_only_video_codecs: vec![],
         max_bitrate_bps: None,
     })
     .unwrap();

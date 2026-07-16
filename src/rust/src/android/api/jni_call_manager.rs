@@ -158,7 +158,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
     data_mode: jint,
     audio_levels_interval_millis: jint,
     dred_duration: jbyte,
-    enable_vp9: jboolean,
+    enable_vp9_encode: jboolean,
+    enable_vp9_decode: jboolean,
 ) {
     let audio_levels_interval = if audio_levels_interval_millis <= 0 {
         None
@@ -176,7 +177,8 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
                 CallConfig::default()
                     .with_data_mode(DataMode::from_i32(data_mode))
                     .with_dred_duration(dred_duration as u8)
-                    .with_enable_vp9(enable_vp9),
+                    .with_enable_vp9_encode(enable_vp9_encode)
+                    .with_enable_vp9_decode(enable_vp9_decode),
                 audio_levels_interval,
             )
         })

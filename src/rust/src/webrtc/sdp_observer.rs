@@ -91,6 +91,8 @@ impl SrtpKey {
 pub struct SessionDescription {
     /// Pointer to C++ SessionDescription object.
     rffi: webrtc::ptr::Unique<RffiSessionDescription>,
+    /// For 1:1 calls only, indicates whether the remote party supports asymmetric video codecs.
+    pub supports_asymmetric: Option<bool>,
 }
 
 #[repr(C)]
@@ -102,6 +104,7 @@ pub enum RffiVideoCodecType {
 
 /// cbindgen:field-names=[type, level]
 #[repr(C)]
+#[derive(Clone, Copy, Debug)]
 pub struct RffiVideoCodec {
     r#type: RffiVideoCodecType,
 }
@@ -110,8 +113,12 @@ pub struct RffiVideoCodec {
 pub struct RffiConnectionParametersV4 {
     pub ice_ufrag: webrtc::ptr::Borrowed<c_char>,
     pub ice_pwd: webrtc::ptr::Borrowed<c_char>,
-    pub receive_video_codecs: webrtc::ptr::Borrowed<RffiVideoCodec>,
-    pub receive_video_codecs_size: usize,
+    pub bidirectional_video_codecs: webrtc::ptr::Borrowed<RffiVideoCodec>,
+    pub bidirectional_video_codecs_size: usize,
+    pub encode_only_video_codecs: webrtc::ptr::Borrowed<RffiVideoCodec>,
+    pub encode_only_video_codecs_size: usize,
+    pub decode_only_video_codecs: webrtc::ptr::Borrowed<RffiVideoCodec>,
+    pub decode_only_video_codecs_size: usize,
 }
 
 impl webrtc::ptr::Delete for RffiSessionDescription {
@@ -128,11 +135,20 @@ impl webrtc::ptr::Delete for RffiConnectionParametersV4 {
 
 impl SessionDescription {
     /// Create a new SessionDescription from a C++ SessionDescription object.
-    pub fn new(rffi: webrtc::ptr::Unique<RffiSessionDescription>) -> Self {
-        Self { rffi }
+    pub fn new(
+        rffi: webrtc::ptr::Unique<RffiSessionDescription>,
+        supports_asymmetric: Option<bool>,
+    ) -> Self {
+        Self {
+            rffi,
+            supports_asymmetric,
+        }
     }
 
     pub fn take_rffi(mut self) -> webrtc::ptr::Unique<RffiSessionDescription> {
+        // OK to ignore supports_asymmetric -- we only call this method to get a pointer for WebRTC,
+        // which won't need it.
+        // (Note also that since we take self by value, supports_asymmetric is dropped.)
         self.rffi.take()
     }
 
@@ -171,8 +187,24 @@ impl SessionDescription {
         call_config: &CallConfig,
         data_mode: DataMode,
     ) -> Result<protobuf::signaling::ConnectionParametersV4> {
-        let rffi_v4_ptr = webrtc::ptr::Unique::from(unsafe {
-            sdp::Rust_sessionDescriptionToV4(self.rffi.borrow(), call_config.enable_vp9)
+        let supports_asymmetric = self.supports_asymmetric.ok_or(anyhow::anyhow!(
+            "Unexpectedly called SessionDescription::to_v4 in a group call context"
+        ))?;
+        let rffi_v4_ptr = webrtc::ptr::Unique::from(if supports_asymmetric {
+            unsafe {
+                sdp::Rust_sessionDescriptionToV4(
+                    self.rffi.borrow(),
+                    call_config.enable_vp9_encode,
+                    call_config.enable_vp9_decode,
+                )
+            }
+        } else {
+            unsafe {
+                sdp::Rust_sessionDescriptionToV4Legacy(
+                    self.rffi.borrow(),
+                    call_config.enable_vp9_encode && call_config.enable_vp9_decode,
+                )
+            }
         });
         let rffi_v4 = rffi_v4_ptr.as_ref();
         if rffi_v4.is_none() {
@@ -182,33 +214,51 @@ impl SessionDescription {
 
         let ice_ufrag = from_cstr(rffi_v4.ice_ufrag.as_ptr());
         let ice_pwd = from_cstr(rffi_v4.ice_pwd.as_ptr());
-        let receive_video_codecs: Vec<protobuf::signaling::VideoCodec> = unsafe {
-            if rffi_v4.receive_video_codecs.is_null() {
+
+        fn rffi_codecs_to_proto(
+            rffi_codecs: webrtc::ptr::Borrowed<RffiVideoCodec>,
+            size: usize,
+        ) -> Vec<protobuf::signaling::VideoCodec> {
+            if rffi_codecs.is_null() {
                 &[]
             } else {
-                std::slice::from_raw_parts(
-                    rffi_v4.receive_video_codecs.as_ptr(),
-                    rffi_v4.receive_video_codecs_size,
-                )
+                unsafe { std::slice::from_raw_parts(rffi_codecs.as_ptr(), size) }
             }
+            .iter()
+            .map(|rffi_codec| {
+                let r#type = match rffi_codec.r#type {
+                    RffiVideoCodecType::Vp8 => protobuf::signaling::VideoCodecType::Vp8,
+                    RffiVideoCodecType::Vp9 => protobuf::signaling::VideoCodecType::Vp9,
+                };
+                protobuf::signaling::VideoCodec {
+                    r#type: Some(r#type as i32),
+                }
+            })
+            .collect()
         }
-        .iter()
-        .map(|rffi_codec| {
-            let r#type = match rffi_codec.r#type {
-                RffiVideoCodecType::Vp8 => protobuf::signaling::VideoCodecType::Vp8,
-                RffiVideoCodecType::Vp9 => protobuf::signaling::VideoCodecType::Vp9,
-            };
-            protobuf::signaling::VideoCodec {
-                r#type: Some(r#type as i32),
-            }
-        })
-        .collect();
+
+        let bidirectional_video_codecs = rffi_codecs_to_proto(
+            rffi_v4.bidirectional_video_codecs,
+            rffi_v4.bidirectional_video_codecs_size,
+        );
+
+        let encode_only_video_codecs = rffi_codecs_to_proto(
+            rffi_v4.encode_only_video_codecs,
+            rffi_v4.encode_only_video_codecs_size,
+        );
+
+        let decode_only_video_codecs = rffi_codecs_to_proto(
+            rffi_v4.decode_only_video_codecs,
+            rffi_v4.decode_only_video_codecs_size,
+        );
 
         Ok(protobuf::signaling::ConnectionParametersV4 {
             public_key: Some(public_key),
             ice_ufrag: Some(ice_ufrag),
             ice_pwd: Some(ice_pwd),
-            receive_video_codecs,
+            receive_video_codecs: bidirectional_video_codecs,
+            encode_only_video_codecs,
+            decode_only_video_codecs,
             max_bitrate_bps: Some(data_mode.max_bitrate().as_bps()),
         })
     }
@@ -216,60 +266,109 @@ impl SessionDescription {
     pub fn offer_from_v4(
         v4: &protobuf::signaling::ConnectionParametersV4,
         call_config: &CallConfig,
+        is_v4_local: bool,
     ) -> Result<Self> {
-        Self::from_v4(true, v4, call_config)
+        Self::from_v4(true, v4, call_config, is_v4_local)
     }
 
     pub fn answer_from_v4(
         v4: &protobuf::signaling::ConnectionParametersV4,
         call_config: &CallConfig,
+        is_v4_local: bool,
     ) -> Result<Self> {
-        Self::from_v4(false, v4, call_config)
+        Self::from_v4(false, v4, call_config, is_v4_local)
     }
 
     fn from_v4(
         offer: bool,
         v4: &protobuf::signaling::ConnectionParametersV4,
         call_config: &CallConfig,
+        is_v4_local: bool,
     ) -> Result<Self> {
         let rffi_ice_ufrag = to_cstring(&v4.ice_ufrag)?;
         let rffi_ice_pwd = to_cstring(&v4.ice_pwd)?;
-        let mut rffi_video_codecs: Vec<RffiVideoCodec> = Vec::new();
-        for codec in &v4.receive_video_codecs {
-            if let protobuf::signaling::VideoCodec {
+        fn proto_to_rffi(codec: &protobuf::signaling::VideoCodec) -> Option<RffiVideoCodec> {
+            const VP8: i32 = protobuf::signaling::VideoCodecType::Vp8 as i32;
+            const VP9: i32 = protobuf::signaling::VideoCodecType::Vp9 as i32;
+            let protobuf::signaling::VideoCodec {
                 r#type: Some(r#type),
             } = codec
-            {
-                const VP8: i32 = protobuf::signaling::VideoCodecType::Vp8 as i32;
-                const VP9: i32 = protobuf::signaling::VideoCodecType::Vp9 as i32;
-                let rffi_type = match *r#type {
-                    VP8 => Some(RffiVideoCodecType::Vp8),
-                    VP9 => Some(RffiVideoCodecType::Vp9),
-                    _ => None,
-                };
-                if let Some(rffi_type) = rffi_type {
-                    rffi_video_codecs.push(RffiVideoCodec { r#type: rffi_type });
-                }
+            else {
+                return None;
+            };
+            match *r#type {
+                VP8 => Some(RffiVideoCodecType::Vp8),
+                VP9 => Some(RffiVideoCodecType::Vp9),
+                _ => None,
             }
+            .map(|rffi_type| RffiVideoCodec { r#type: rffi_type })
         }
+
+        let rffi_bidirectional_video_codecs: Vec<RffiVideoCodec> = v4
+            .receive_video_codecs
+            .iter()
+            .filter_map(proto_to_rffi)
+            .collect();
+
+        let supports_asymmetric =
+            !v4.encode_only_video_codecs.is_empty() && !v4.decode_only_video_codecs.is_empty();
+        let (rffi_encode_only_video_codecs, rffi_decode_only_video_codecs) = if !supports_asymmetric
+        {
+            (Vec::new(), Vec::new())
+        } else {
+            (
+                v4.encode_only_video_codecs
+                    .iter()
+                    .filter_map(proto_to_rffi)
+                    .collect(),
+                v4.decode_only_video_codecs
+                    .iter()
+                    .filter_map(proto_to_rffi)
+                    .collect(),
+            )
+        };
+
         let rffi_v4 = RffiConnectionParametersV4 {
             ice_ufrag: webrtc::ptr::Borrowed::from_ptr(rffi_ice_ufrag.as_ptr()),
             ice_pwd: webrtc::ptr::Borrowed::from_ptr(rffi_ice_pwd.as_ptr()),
-            receive_video_codecs: webrtc::ptr::Borrowed::from_ptr(rffi_video_codecs.as_ptr()),
-            receive_video_codecs_size: rffi_video_codecs.len(),
+            bidirectional_video_codecs: webrtc::ptr::Borrowed::from_ptr(
+                rffi_bidirectional_video_codecs.as_ptr(),
+            ),
+            bidirectional_video_codecs_size: rffi_bidirectional_video_codecs.len(),
+            encode_only_video_codecs: webrtc::ptr::Borrowed::from_ptr(
+                rffi_encode_only_video_codecs.as_ptr(),
+            ),
+            encode_only_video_codecs_size: rffi_encode_only_video_codecs.len(),
+            decode_only_video_codecs: webrtc::ptr::Borrowed::from_ptr(
+                rffi_decode_only_video_codecs.as_ptr(),
+            ),
+            decode_only_video_codecs_size: rffi_decode_only_video_codecs.len(),
         };
-        let rffi = webrtc::ptr::Unique::from(unsafe {
-            sdp::Rust_sessionDescriptionFromV4(
-                offer,
-                webrtc::ptr::Borrowed::from_ptr(&rffi_v4),
-                call_config.enable_tcc_audio,
-                call_config.enable_vp9,
-            )
+        let rffi = webrtc::ptr::Unique::from(if supports_asymmetric {
+            unsafe {
+                sdp::Rust_sessionDescriptionFromV4(
+                    offer,
+                    webrtc::ptr::Borrowed::from_ptr(&rffi_v4),
+                    call_config.enable_tcc_audio,
+                    call_config.enable_vp9_encode,
+                    call_config.enable_vp9_decode,
+                    is_v4_local,
+                )
+            }
+        } else {
+            unsafe {
+                sdp::Rust_sessionDescriptionFromV4Legacy(
+                    offer,
+                    webrtc::ptr::Borrowed::from_ptr(&rffi_v4),
+                    call_config.enable_tcc_audio,
+                    call_config.enable_vp9_encode && call_config.enable_vp9_decode,
+                )
+            }
         });
         if rffi.is_null() {
             return Err(RingRtcError::MungeSdp.into());
         }
-        Ok(Self::new(rffi))
+        Ok(Self::new(rffi, Some(supports_asymmetric)))
     }
 
     pub fn local_for_group_call(
@@ -295,7 +394,7 @@ impl SessionDescription {
         if sdi.is_null() {
             return Err(RingRtcError::MungeSdp.into());
         }
-        Ok(Self::new(sdi))
+        Ok(Self::new(sdi, None))
     }
 
     pub fn remote_for_group_call(
@@ -321,7 +420,7 @@ impl SessionDescription {
         if sdi.is_null() {
             return Err(RingRtcError::MungeSdp.into());
         }
-        Ok(Self::new(sdi))
+        Ok(Self::new(sdi, None))
     }
 }
 
@@ -366,11 +465,14 @@ pub struct CreateSessionDescriptionObserver {
     condition: FutureResult<Result<UniqueSessionDescription>>,
     /// Pointer to C++ webrtc::rffi::RffiCreateSessionDescriptionObserver object
     rffi: webrtc::Arc<RffiCreateSessionDescriptionObserver>,
+    /// For a 1:1 call, should be Some with a value indicating whether to use asymmetric codecs.
+    /// For a group call, should be None.
+    supports_asymmetric: Option<bool>,
 }
 
 impl CreateSessionDescriptionObserver {
     /// Create a new CreateSessionDescriptionObserver.
-    fn new() -> Self {
+    fn new(supports_asymmetric: Option<bool>) -> Self {
         Self {
             condition: Arc::new((
                 Mutex::new((
@@ -380,6 +482,7 @@ impl CreateSessionDescriptionObserver {
                 Condvar::new(),
             )),
             rffi: webrtc::Arc::null(),
+            supports_asymmetric,
         }
     }
 
@@ -433,7 +536,10 @@ impl CreateSessionDescriptionObserver {
                 })?;
             }
             match &mut guard.1 {
-                Ok(v) => Ok(SessionDescription::new(v.0.take())),
+                Ok(v) => Ok(SessionDescription::new(
+                    v.0.take(),
+                    self.supports_asymmetric,
+                )),
                 Err(e) => Err(
                     RingRtcError::CreateSessionDescriptionObserverResult(format!("{}", e)).into(),
                 ),
@@ -524,8 +630,13 @@ const CSD_OBSERVER_CBS_PTR: *const CreateSessionDescriptionObserverCallbacks = &
 /// Creates a new WebRTC C++ CreateSessionDescriptionObserver object,
 /// registering the observer callbacks to this module, and wraps the
 /// result in a Rust CreateSessionDescriptionObserver object.
-pub fn create_csd_observer() -> Box<CreateSessionDescriptionObserver> {
-    let csd_observer = Box::new(CreateSessionDescriptionObserver::new());
+/// For a 1:1 call, |supports_asymmetric| should be Some with a value indicating
+/// whether to use asymmetric codecs.
+/// For a group call, it should be None.
+pub fn create_csd_observer(
+    supports_asymmetric: Option<bool>,
+) -> Box<CreateSessionDescriptionObserver> {
+    let csd_observer = Box::new(CreateSessionDescriptionObserver::new(supports_asymmetric));
     let csd_observer_ptr = Box::into_raw(csd_observer);
     let rffi = webrtc::Arc::from_owned(unsafe {
         sdp::Rust_createCreateSessionDescriptionObserver(

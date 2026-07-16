@@ -130,6 +130,10 @@ impl PeerConnection {
         unsafe { pc::Rust_createOffer(self.rffi.as_borrowed(), csd_observer.rffi().as_borrowed()) }
     }
 
+    pub fn create_send_only_transceiver(&self) -> bool {
+        unsafe { pc::Rust_createSendOnlyTransceiver(self.rffi.as_borrowed()) }
+    }
+
     /// Rust wrapper around C++ PeerConnection::SetLocalDescription().
     pub fn set_local_description(
         &self,

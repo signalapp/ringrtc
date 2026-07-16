@@ -46,6 +46,10 @@ unsafe extern "C" {
         csd_observer: webrtc::ptr::BorrowedRc<RffiCreateSessionDescriptionObserver>,
     );
 
+    pub fn Rust_createSendOnlyTransceiver(
+        peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
+    ) -> bool;
+
     pub fn Rust_setLocalDescription(
         peer_connection: webrtc::ptr::BorrowedRc<RffiPeerConnection>,
         ssd_observer: webrtc::ptr::BorrowedRc<RffiSetSessionDescriptionObserver>,

@@ -989,7 +989,9 @@ fn proceed(mut cx: FunctionContext) -> JsResult<JsValue> {
         );
         let call_config = CallConfig::default()
             .with_data_mode(DataMode::from_i32(data_mode))
-            .with_dred_duration(dred_duration);
+            .with_dred_duration(dred_duration)
+            .with_enable_vp9_encode(true)
+            .with_enable_vp9_decode(true);
         endpoint
             .call_manager
             .proceed(call_id, call_context, call_config, audio_levels_interval)?;

@@ -63,11 +63,18 @@ message ConnectionParametersV4 {
   optional bytes public_key = 1;
   optional string ice_ufrag = 2;
   optional string ice_pwd = 3;
-  // In other words, the video codecs the sender can receive.
+  // DEPRECATED - This is now confusing nomenclature!
+  // It represents the video codecs the sender can both receive AND send.
   repeated VideoCodec receive_video_codecs = 4;
   // Used at call establishment to convey the bitrate that the signaling sender (media receiver)
   // wants the signaling receiver (media sender) to send.
   optional uint64 max_bitrate_bps = 5;
+  // The video codecs the sender can **encode**. If absent / empty list,
+  // fall back to |receive_video_codecs|.
+  repeated VideoCodec encode_only_video_codecs = 6;
+  // The video codecs the sender can **decode**. If absent / empty list,
+  // fall back to |receive_video_codecs|.
+  repeated VideoCodec decode_only_video_codecs = 7;
 }
 
 // A generic calling message that is opaque to the application but interpreted by RingRTC.

@@ -684,7 +684,8 @@ pub extern "C" fn ringrtcProceed(
     appCallContext: AppCallContext,
     dataMode: i32,
     audioLevelsIntervalMillis: u64,
-    enable_vp9: bool,
+    enable_vp9_encode: bool,
+    enable_vp9_decode: bool,
     dred_duration: u8,
 ) -> *mut c_void {
     let audio_levels_interval = if audioLevelsIntervalMillis == 0 {
@@ -698,7 +699,8 @@ pub extern "C" fn ringrtcProceed(
         appCallContext,
         CallConfig::default()
             .with_data_mode(DataMode::from_i32(dataMode))
-            .with_enable_vp9(enable_vp9)
+            .with_enable_vp9_encode(enable_vp9_encode)
+            .with_enable_vp9_decode(enable_vp9_decode)
             .with_dred_duration(dred_duration),
         audio_levels_interval,
     ) {

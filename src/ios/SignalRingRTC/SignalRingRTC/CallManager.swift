@@ -565,10 +565,11 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - videoCaptureController: UI provided capturer interface
     ///   - dataMode: The desired data mode to start the session with
     ///   - audioLevelsIntervalMillis: If non-zero, the desired interval between audio level events (in milliseconds)
-    ///   - enableVp9: Whether to allow use of the VP9 codec for video for this call
+    ///   - enableVp9Encode: Whether to allow use of the VP9 codec for outgoing (encoded) video for this call
+    ///   - enableVp9Decode: Whether to allow use of the VP9 codec for incoming (decoded) video for this call
     ///   - dredDuration: The DRED redundancy level for the audio encoder (0 = disabled)
     @MainActor
-    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, dataMode: DataMode, audioLevelsIntervalMillis: UInt64?, enableVp9: Bool = false, dredDuration: UInt8 = 0) throws {
+    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, dataMode: DataMode, audioLevelsIntervalMillis: UInt64?, enableVp9Encode: Bool = false, enableVp9Decode: Bool = true, dredDuration: UInt8 = 0) throws {
         Logger.info("proceed(): callId: 0x\(String(callId, radix: 16)), hideIp: \(hideIp)")
         for iceServer in iceServers {
             for url in iceServer.urlStrings {
@@ -602,7 +603,7 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
         // creating the connection.
         let appCallContext = CallContext(iceServers: iceServers, hideIp: hideIp, audioSource: audioSource, audioTrack: audioTrack, videoSource: videoSource, videoTrack: videoTrack, videoCaptureController: videoCaptureController)
 
-        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), dataMode.rawValue, audioLevelsIntervalMillis ?? 0, enableVp9, dredDuration)
+        let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), dataMode.rawValue, audioLevelsIntervalMillis ?? 0, enableVp9Encode, enableVp9Decode, dredDuration)
         if retPtr == nil {
             throw CallManagerError.apiFailed(description: "proceed() function failure")
         }

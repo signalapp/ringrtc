@@ -854,7 +854,8 @@ pub struct CallConfig {
     pub audio_jitter_buffer_config: AudioJitterBufferConfig,
     pub audio_rtcp_report_interval_ms: i32,
 
-    pub enable_vp9: bool,
+    pub enable_vp9_encode: bool,
+    pub enable_vp9_decode: bool,
 }
 
 impl Default for CallConfig {
@@ -870,7 +871,8 @@ impl Default for CallConfig {
             enable_tcc_audio: false,
             audio_jitter_buffer_config: Default::default(),
             audio_rtcp_report_interval_ms: 5000,
-            enable_vp9: true,
+            enable_vp9_encode: true,
+            enable_vp9_decode: true,
         }
     }
 }
@@ -880,9 +882,13 @@ impl CallConfig {
         self.data_mode = data_mode;
         self
     }
+    pub fn with_enable_vp9_encode(mut self, enable_vp9_encode: bool) -> Self {
+        self.enable_vp9_encode = enable_vp9_encode;
+        self
+    }
 
-    pub fn with_enable_vp9(mut self, enable_vp9: bool) -> Self {
-        self.enable_vp9 = enable_vp9;
+    pub fn with_enable_vp9_decode(mut self, enable_vp9_decode: bool) -> Self {
+        self.enable_vp9_decode = enable_vp9_decode;
         self
     }
 

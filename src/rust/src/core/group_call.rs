@@ -3486,7 +3486,7 @@ impl Client {
 
         // Call create_offer for the side effect of setting up the state of the RtpTransceivers
         // potentially created above.
-        let observer = create_csd_observer();
+        let observer = create_csd_observer(None);
         state.peer_connection.create_offer(observer.as_ref());
         let _ = observer.get_result()?;
 

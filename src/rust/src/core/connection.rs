@@ -628,7 +628,8 @@ where
             let ice_gatherer = peer_connection.create_shared_ice_gatherer()?;
             peer_connection.use_shared_ice_gatherer(&ice_gatherer)?;
 
-            let observer = create_csd_observer();
+            // Start with asymmetric negotiation, and fall back if needed.
+            let observer = create_csd_observer(Some(true));
             peer_connection.create_offer(observer.as_ref());
             // This must be kept in sync with call.rs where it passes in V2 into create_connection.
             let offer = observer.get_result()?;
@@ -642,13 +643,24 @@ where
             )?;
 
             info!(
-                "Outgoing offer codecs: {:?}, max_bitrate: {:?}",
-                v4_offer.receive_video_codecs, v4_offer.max_bitrate_bps
+                "Outgoing offer: bidirectional codecs: {:?}, encode codecs: {:?}, decode codecs: {:?}, max_bitrate: {:?}",
+                v4_offer.receive_video_codecs,
+                v4_offer.encode_only_video_codecs,
+                v4_offer.decode_only_video_codecs,
+                v4_offer.max_bitrate_bps
             );
 
-            if v4_offer.receive_video_codecs.is_empty() {
+            // For backwards compatibility, we require that clients send all 3 of these in
+            // outgoing offers.
+            // Note that this will **NOT** limit later removal of the receive_video_codecs field,
+            // because this is outgoing-offer-only.
+            // We need to be less strict about what we receive.
+            if v4_offer.receive_video_codecs.is_empty()
+                || v4_offer.encode_only_video_codecs.is_empty()
+                || v4_offer.decode_only_video_codecs.is_empty()
+            {
                 warn!(
-                    "No receive video codecs in outgoing offer. SDP:\n{}",
+                    "A required video codec field in outgoing offer is empty. SDP:\n{}",
                     redact_string(offer.to_sdp().as_deref().unwrap_or("None"))
                 );
             }
@@ -699,28 +711,50 @@ where
 
             peer_connection.use_shared_ice_gatherer(ice_gatherer)?;
 
+            // NOTE: create_send_only_transceiver must be called before create_offer.
+            // Otherwise, WebRTC would not properly create transceivers to match the SDP, and call
+            // negotiation will fail.
+            // (To a user this would look like the call never ringing for the callee and the call
+            // hanging up after ringing once for the caller.)
+            if !peer_connection.create_send_only_transceiver() {
+                anyhow::bail!("Couldn't create send-only transceiver for video");
+            }
+
             // Call create_offer again for the side effects it has with setting up the state of the
             // RtpTransceivers:
             // https://source.chromium.org/chromium/chromium/src/+/main:third_party/webrtc/pc/sdp_offer_answer.cc;l=4307-4312;drc=a6544377bc1dde24394255c0c83b43dcaa8905db
-            let observer = create_csd_observer();
+            let observer = create_csd_observer(Some(true));
             peer_connection.create_offer(observer.as_ref());
             let _ = observer.get_result()?;
 
             let (mut offer, mut answer, remote_public_key) = if let (
-                Some(v4_offer),
+                Some(mut v4_offer),
                 Some(v4_answer),
             ) =
                 (offer.to_v4(), received.answer.to_v4())
             {
+                if v4_answer.encode_only_video_codecs.is_empty()
+                    || v4_answer.decode_only_video_codecs.is_empty()
+                {
+                    // This indicates that the remote doesn't support asymmetric, so clear these to force
+                    // us back into the legacy path.
+                    v4_offer.encode_only_video_codecs.clear();
+                    v4_offer.decode_only_video_codecs.clear();
+                }
                 // Set the remote max based on the bitrate in the answer.
                 bandwidth_controller.remote_max = v4_answer.max_bitrate_bps.map(DataRate::from_bps);
 
-                let offer = SessionDescription::offer_from_v4(&v4_offer, &self.call_config)?;
-                let answer = SessionDescription::answer_from_v4(&v4_answer, &self.call_config)?;
+                let offer = SessionDescription::offer_from_v4(&v4_offer, &self.call_config, true)?;
+                let answer =
+                    SessionDescription::answer_from_v4(&v4_answer, &self.call_config, false)?;
 
                 info!(
-                    "Incoming answer codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
-                    v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_controller
+                    "Incoming answer: bidirectional codecs: {:?}, encode codecs: {:?}, decode codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
+                    v4_answer.receive_video_codecs,
+                    v4_answer.encode_only_video_codecs,
+                    v4_answer.decode_only_video_codecs,
+                    v4_answer.max_bitrate_bps,
+                    bandwidth_controller
                 );
 
                 (offer, answer, v4_answer.public_key)
@@ -810,11 +844,15 @@ where
                 bandwidth_controller.remote_max = v4_offer.max_bitrate_bps.map(DataRate::from_bps);
 
                 info!(
-                    "Incoming offer codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
-                    v4_offer.receive_video_codecs, v4_offer.max_bitrate_bps, bandwidth_controller
+                    "Incoming offer: bidirectional codecs: {:?}, encode codecs: {:?}, decode codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
+                    v4_offer.receive_video_codecs,
+                    v4_offer.encode_only_video_codecs,
+                    v4_offer.decode_only_video_codecs,
+                    v4_offer.max_bitrate_bps,
+                    bandwidth_controller
                 );
 
-                let offer = SessionDescription::offer_from_v4(v4_offer, &self.call_config)?;
+                let offer = SessionDescription::offer_from_v4(v4_offer, &self.call_config, false)?;
 
                 (offer, v4_offer.public_key.clone())
             } else {
@@ -842,12 +880,13 @@ where
             };
 
             let observer = create_ssd_observer();
+            let offer_supports_asymmetric = offer.supports_asymmetric;
             peer_connection.set_remote_description(observer.as_ref(), offer);
             // on_add_stream can happen while SetRemoteDescription is happening.
             // But they won't be processed until start_fsm() is called below.
             observer.get_result()?;
 
-            let observer = create_csd_observer();
+            let observer = create_csd_observer(offer_supports_asymmetric);
             peer_connection.create_answer(observer.as_ref());
             let mut answer = observer.get_result()?;
             if let Some(answer_key) = &answer_key {
@@ -862,12 +901,16 @@ where
                 )?;
 
                 info!(
-                    "Outgoing answer codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
-                    v4_answer.receive_video_codecs, v4_answer.max_bitrate_bps, bandwidth_controller
+                    "Outgoing answer: bidirectional codecs: {:?}, encode codecs: {:?}, decode codecs: {:?}, max_bitrate: {:?}, bandwidth_controller: {:?}",
+                    v4_answer.receive_video_codecs,
+                    v4_answer.encode_only_video_codecs,
+                    v4_answer.decode_only_video_codecs,
+                    v4_answer.max_bitrate_bps,
+                    bandwidth_controller
                 );
 
                 // We have to change the local answer to match what we send back
-                answer = SessionDescription::answer_from_v4(&v4_answer, &self.call_config)?;
+                answer = SessionDescription::answer_from_v4(&v4_answer, &self.call_config, true)?;
                 // And we have to make sure to do this again since answer_from_v4 doesn't do it.
                 if let Some(answer_key) = &answer_key {
                     answer.disable_dtls_and_set_srtp_key(answer_key)?;

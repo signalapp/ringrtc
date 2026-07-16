@@ -5,8 +5,10 @@
 package org.signal.ringrtc;
 
 import androidx.annotation.NonNull;
+import android.media.MediaCodecInfo;
 
 import org.webrtc.EglBase;
+import org.webrtc.HardwareVideoDecoderFactory;
 import org.webrtc.HardwareVideoEncoderFactory;
 
 import java.nio.ByteBuffer;
@@ -57,19 +59,21 @@ public final class Util {
         }
     }
 
+    private static boolean supportsVp9(MediaCodecInfo info) {
+        for (String mimeType : info.getSupportedTypes()) {
+            if (mimeType.equals("video/x-vnd.on2.vp9")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean deviceSupportsVp9HardwareEncoder(EglBase eglBase) {
       if (eglBase == null) {
         return false;
       }
 
-      HardwareVideoEncoderFactory hwFactory = new HardwareVideoEncoderFactory(eglBase.getEglBaseContext(), true, true, (mediaCodecInfo) -> {
-        for (String mimeType : mediaCodecInfo.getSupportedTypes()) {
-          if (mimeType.equals("video/x-vnd.on2.vp9")) {
-            return true;
-          }
-        }
-        return false;
-      });
+      HardwareVideoEncoderFactory hwFactory = new HardwareVideoEncoderFactory(eglBase.getEglBaseContext(), true, true, Util::supportsVp9);
 
       if (hwFactory.getSupportedCodecs().length == 0) {
         Log.w(TAG, "No supported VP9 hardware encoder found");
@@ -77,5 +81,20 @@ public final class Util {
       }
 
       return true;
+    }
+
+    public static boolean deviceSupportsVp9HardwareDecoder(EglBase eglBase) {
+        if (eglBase == null) {
+            return false;
+        }
+
+        HardwareVideoDecoderFactory hwFactory = new HardwareVideoDecoderFactory(eglBase.getEglBaseContext(), Util::supportsVp9);
+
+        if (hwFactory.getSupportedCodecs().length == 0) {
+            Log.w(TAG, "No supported VP9 hardware decoder found");
+            return false;
+        }
+
+        return true;
     }
 }

@@ -417,7 +417,8 @@ public class CallManager {
    * @param dataMode               desired data mode to start the session with
    * @param audioLevelsIntervalMs  if greater than 0, enable audio levels with this interval (in milliseconds)
    * @param dredDuration           if provided, client will encode DRED PLC for the period specified
-   * @param enableVp9              if true, allow use of software VP9 video codec for this call
+   * @param enableVp9Encode        if true, allow use of software VP9 video codec encoding for this call
+   * @param enableVp9Decode        if true, allow use of software VP9 video codec decoding for this call
    * @param enableCamera           if true, enable the local camera video track when created
    *
    * @throws CallException for native code failures
@@ -435,7 +436,8 @@ public class CallManager {
                                 DataMode                       dataMode,
                       @Nullable Integer                        audioLevelsIntervalMs,
                       @Nullable Byte                           dredDuration,
-                                boolean                        enableVp9,
+                                boolean                        enableVp9Encode,
+                                boolean                        enableVp9Decode,
                                 boolean                        enableCamera)
     throws CallException
   {
@@ -469,7 +471,8 @@ public class CallManager {
                    dataMode.ordinal(),
                    audioLevelsIntervalMillis,
                    dredDurationByte,
-                   Util.deviceSupportsVp9HardwareEncoder(eglBase) || enableVp9);
+                   Util.deviceSupportsVp9HardwareEncoder(eglBase) || enableVp9Encode,
+                   Util.deviceSupportsVp9HardwareDecoder(eglBase) || enableVp9Decode);
   }
 
   /**
@@ -2570,7 +2573,8 @@ public class CallManager {
                         int         dataMode,
                         int         audioLevelsIntervalMillis,
                         byte        dredDuration,
-                        boolean     enableVp9)
+                        boolean     enableVp9Encode,
+                        boolean     enableVp9Decode)
     throws CallException;
 
   private native
