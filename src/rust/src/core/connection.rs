@@ -1676,6 +1676,14 @@ where
         })
     }
 
+    pub fn regather_on_all_networks(&self) -> Result<()> {
+        let webrtc = self.webrtc.lock()?;
+        let pc = webrtc.peer_connection()?;
+
+        pc.regather_on_all_networks();
+        Ok(())
+    }
+
     /// Send a ConnectionEvent to the internal FSM.
     fn inject_event(&mut self, event: ConnectionEvent) -> Result<()> {
         self.fsm_sender

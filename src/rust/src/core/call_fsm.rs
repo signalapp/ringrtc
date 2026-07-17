@@ -806,6 +806,9 @@ where
                     ) => {
                         if call.active_device_id()? == remote_device_id {
                             call.set_state(CallState::ReconnectingAfterAccepted)?;
+                            if call.active_connection().and_then(|c| c.regather_on_all_networks()).is_ok() {
+                                info!("reconnecting: regathering candidates on all networks");
+                            }
                             self.notify_application(call, ApplicationEvent::Reconnecting)
                         } else {
                             info!(
