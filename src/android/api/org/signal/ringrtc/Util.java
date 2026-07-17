@@ -97,4 +97,8 @@ public final class Util {
 
         return true;
     }
+
+    public static boolean filterVp9Support(MediaCodecInfo info) {
+      return !supportsVp9(info);
+    }
 }

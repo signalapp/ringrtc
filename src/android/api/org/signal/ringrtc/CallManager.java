@@ -17,6 +17,9 @@ import org.webrtc.AudioTrack;
 import org.webrtc.ContextUtils;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
+import org.webrtc.HardwareVideoDecoderFactory;
+import org.webrtc.HardwareVideoEncoderFactory;
+import org.webrtc.PlatformSoftwareVideoDecoderFactory;
 import org.webrtc.SoftwareVideoDecoderFactory;
 import org.webrtc.SoftwareVideoEncoderFactory;
 import org.webrtc.EglBase;
@@ -157,19 +160,7 @@ public class CallManager {
     return builder.toString();
   }
 
-  class PeerConnectionFactoryOptions extends PeerConnectionFactory.Options {
-    public PeerConnectionFactoryOptions() {
-      // Give the (native default) behavior of filtering out loopback addresses.
-      this.networkIgnoreMask = PeerConnectionFactory.Options.ADAPTER_TYPE_LOOPBACK;
-    }
-  }
-
-  /// Creates a PeerConnectionFactory appropriate for our use of WebRTC.
-  ///
-  /// If `eglBase` is present, hardware codecs will be used unless they are known to be broken
-  /// in some way. Otherwise, we'll fall back to software codecs.
-  private PeerConnectionFactory createPeerConnectionFactory(@Nullable EglBase     eglBase,
-                                                            @NonNull  AudioConfig audioConfig) {
+  private static boolean isHardwareEncodeBlocked() {
     Set<String> HARDWARE_ENCODING_BLOCKLIST = new HashSet<String>() {{
       // Samsung S6 with Exynos 7420 SoC
       add("SM-G920F");
@@ -206,18 +197,63 @@ public class CallManager {
       add("SM-S901B");
     }};
 
+    return HARDWARE_ENCODING_BLOCKLIST.contains(Build.MODEL);
+  }
+
+  /**
+   *
+   * Applies additional checks to the VideoConfig to compute final VideoConfig.
+   *
+   * @param eglBase         eglBase to use for this Call
+   * @param appVideoConfig  The app provided VideoConfig
+   */
+  private static VideoConfig computeFinalFromAppVideoConfig(@Nullable EglBase     eglBase,
+                                                            @NonNull  VideoConfig appVideoConfig ) {
+    VideoConfig finalConfig = new VideoConfig();
+    finalConfig.enableHardwareVp9Encode = Util.deviceSupportsVp9HardwareEncoder(eglBase) && !isHardwareEncodeBlocked() && appVideoConfig.enableHardwareVp9Encode;
+    finalConfig.enableHardwareVp9Decode = Util.deviceSupportsVp9HardwareDecoder(eglBase) && appVideoConfig.enableHardwareVp9Decode;
+    finalConfig.enableSoftwareVp9Encode = appVideoConfig.enableSoftwareVp9Encode;
+    finalConfig.enableSoftwareVp9Decode = appVideoConfig.enableSoftwareVp9Encode;
+    return finalConfig;
+  }
+
+  class PeerConnectionFactoryOptions extends PeerConnectionFactory.Options {
+    public PeerConnectionFactoryOptions() {
+      // Give the (native default) behavior of filtering out loopback addresses.
+      this.networkIgnoreMask = PeerConnectionFactory.Options.ADAPTER_TYPE_LOOPBACK;
+    }
+  }
+
+  /// Creates a PeerConnectionFactory appropriate for our use of WebRTC.
+  ///
+  /// If `eglBase` is present, hardware codecs will be used unless they are known to be broken
+  /// in some way. Otherwise, we'll fall back to software codecs.
+  private PeerConnectionFactory createPeerConnectionFactory(@Nullable EglBase     eglBase,
+                                                            @NonNull  AudioConfig audioConfig,
+                                                            @NonNull  VideoConfig videoConfig) {
     VideoEncoderFactory encoderFactory;
-    if (eglBase == null || HARDWARE_ENCODING_BLOCKLIST.contains(Build.MODEL)) {
+    if (eglBase == null || isHardwareEncodeBlocked()) {
       encoderFactory = new SoftwareVideoEncoderFactory();
     } else {
-      encoderFactory = new DefaultVideoEncoderFactory(eglBase.getEglBaseContext(), true, true);
+      HardwareVideoEncoderFactory hwFactory = new HardwareVideoEncoderFactory(
+          eglBase.getEglBaseContext(),
+          true,
+          true,
+          // remove VP9 hardware options if not enabled
+          videoConfig.enableHardwareVp9Encode ? null : Util::filterVp9Support);
+      encoderFactory = new DefaultVideoEncoderFactory(hwFactory);
     }
 
     VideoDecoderFactory decoderFactory;
     if (eglBase == null) {
       decoderFactory = new SoftwareVideoDecoderFactory();
     } else {
-      decoderFactory = new DefaultVideoDecoderFactory(eglBase.getEglBaseContext());
+      HardwareVideoDecoderFactory hwFactory = new HardwareVideoDecoderFactory(
+          eglBase.getEglBaseContext(),
+          // remove VP9 hardware options if not enabled
+          videoConfig.enableHardwareVp9Decode ? null : Util::filterVp9Support);
+      VideoDecoderFactory swFactory = new PlatformSoftwareVideoDecoderFactory(eglBase.getEglBaseContext());
+      decoderFactory = new DefaultVideoDecoderFactory(hwFactory, swFactory);
     }
 
     Log.i(TAG, "createPeerConnectionFactory(): audioConfig: " + audioConfig.toString());
@@ -409,6 +445,7 @@ public class CallManager {
    * @param context                Call service context
    * @param eglBase                eglBase to use for this Call
    * @param audioConfig            the audio configuration to use
+   * @param videoConfig            controls the use of hardware or software for codecs
    * @param localSink              local video sink to use for this Call
    * @param remoteSink             remote video sink to use for this Call
    * @param camera                 camera control to use for this Call
@@ -417,8 +454,6 @@ public class CallManager {
    * @param dataMode               desired data mode to start the session with
    * @param audioLevelsIntervalMs  if greater than 0, enable audio levels with this interval (in milliseconds)
    * @param dredDuration           if provided, client will encode DRED PLC for the period specified
-   * @param enableVp9Encode        if true, allow use of software VP9 video codec encoding for this call
-   * @param enableVp9Decode        if true, allow use of software VP9 video codec decoding for this call
    * @param enableCamera           if true, enable the local camera video track when created
    *
    * @throws CallException for native code failures
@@ -428,6 +463,7 @@ public class CallManager {
                       @NonNull  Context                        context,
                       @NonNull  EglBase                        eglBase,
                       @NonNull  AudioConfig                    audioConfig,
+                      @NonNull  VideoConfig                    videoConfig,
                       @NonNull  VideoSink                      localSink,
                       @NonNull  VideoSink                      remoteSink,
                       @NonNull  CameraControl                  camera,
@@ -436,8 +472,6 @@ public class CallManager {
                                 DataMode                       dataMode,
                       @Nullable Integer                        audioLevelsIntervalMs,
                       @Nullable Byte                           dredDuration,
-                                boolean                        enableVp9Encode,
-                                boolean                        enableVp9Decode,
                                 boolean                        enableCamera)
     throws CallException
   {
@@ -450,7 +484,8 @@ public class CallManager {
       }
     }
 
-    PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase, audioConfig);
+    VideoConfig finalVideoConfig = computeFinalFromAppVideoConfig(eglBase, videoConfig);
+    PeerConnectionFactory factory = this.createPeerConnectionFactory(eglBase, audioConfig, finalVideoConfig);
 
     CallContext callContext = new CallContext(callId,
                                               context,
@@ -465,14 +500,16 @@ public class CallManager {
 
     int audioLevelsIntervalMillis = audioLevelsIntervalMs == null ? 0 : audioLevelsIntervalMs.intValue();
     byte dredDurationByte = dredDuration == null ? 0 : dredDuration.byteValue();
+    boolean enableVp9Encode = finalVideoConfig.enableHardwareVp9Encode || finalVideoConfig.enableSoftwareVp9Encode;
+    boolean enableVp9Decode = finalVideoConfig.enableHardwareVp9Decode || finalVideoConfig.enableSoftwareVp9Decode;
     ringrtcProceed(nativeCallManager,
                    callId.longValue(),
                    callContext,
                    dataMode.ordinal(),
                    audioLevelsIntervalMillis,
                    dredDurationByte,
-                   Util.deviceSupportsVp9HardwareEncoder(eglBase) || enableVp9Encode,
-                   Util.deviceSupportsVp9HardwareDecoder(eglBase) || enableVp9Decode);
+                   enableVp9Encode,
+                   enableVp9Decode);
   }
 
   /**
@@ -1303,7 +1340,7 @@ public class CallManager {
 
     if (this.groupFactory == null) {
       // The first GroupCall object will create a factory that will be re-used.
-      this.groupFactory = this.createPeerConnectionFactory(null, audioConfig);
+      this.groupFactory = this.createPeerConnectionFactory(null, audioConfig, new VideoConfig());
       if (this.groupFactory == null) {
         Log.e(TAG, "createPeerConnectionFactory failed");
         return null;
@@ -1360,7 +1397,7 @@ public class CallManager {
 
     if (this.groupFactory == null) {
       // The first GroupCall object will create a factory that will be re-used.
-      this.groupFactory = this.createPeerConnectionFactory(null, audioConfig);
+      this.groupFactory = this.createPeerConnectionFactory(null, audioConfig, new VideoConfig());
       if (this.groupFactory == null) {
         Log.e(TAG, "createPeerConnectionFactory failed");
         return null;
