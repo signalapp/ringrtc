@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.70.0
+
+- Add asymmetric video codec support for 1:1 calls
+
+- Android: Add VideoConfig to CallManager::proceed
+
+- Trigger an ICE regather when reconnecting during 1:1 calls
+
+- ADM: Internal enum cleanup and update to cubeb 0.36.0
+
+- Assets: Support disabling on specific platforms
+
+- CI: Update to a newer Xcode and iOS version
+
+- CI: Use curl for fetch-artifact.py
+
+- Build improvements
+
 ## v2.69.7
 
 - Update WebRTC version to 7871a (m150)
