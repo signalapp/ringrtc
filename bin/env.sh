@@ -8,6 +8,8 @@
 # Allow non-exported environment variables
 # shellcheck disable=SC2034
 
+set -e  # It's ok if this "leaks" to scripts sourcing this; we always set it.
+
 REALPATH=realpath
 if ! $REALPATH -e . >/dev/null 2>&1 ; then
   # Can be true on macOS Ventura+ and coreutils from HomeBrew
@@ -111,16 +113,15 @@ if [ -n "$WEBRTC_PLATFORM" ] ; then
     fi
 fi
 
-(
-  set -e  # this will only apply in this subshell
-  if [ -z "${ENV_SH_SKIP_WEBRTC_VERSION_CHECK}" ] && [ -d "${WEBRTC_SRC_DIR}" ]; then
-    cd "${WEBRTC_SRC_DIR}"
-    if ! git merge-base --is-ancestor "${WEBRTC_VERSION}" HEAD; then
-      echo "====================================================================="
-      echo "WARNING: Your webrtc checkout is missing ${WEBRTC_VERSION}."
-      echo "         This may cause problems if the FFI version is now mismatched"
-      echo "====================================================================="
-      sleep 10
-    fi
+print_webrtc_tag_warning() {
+  echo "====================================================================="
+  echo "WARNING: Your webrtc checkout is missing ${WEBRTC_VERSION}."
+  echo "         This may cause problems if the FFI version is now mismatched"
+  echo "====================================================================="
+}
+if [ -z "${ENV_SH_SKIP_WEBRTC_VERSION_CHECK}" ] && [ -d "${WEBRTC_SRC_DIR}" ]; then
+  if ! git -C "${WEBRTC_SRC_DIR}" merge-base --is-ancestor "refs/tags/${WEBRTC_VERSION}" HEAD; then
+    print_webrtc_tag_warning
+    trap print_webrtc_tag_warning EXIT
   fi
-)
+fi
