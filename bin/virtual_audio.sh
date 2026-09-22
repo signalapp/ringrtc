@@ -167,7 +167,7 @@ stop_macos()
 
 setup_linux()
 {
-  pactl load-module module-null-sink sink_name="${INPUT_SINK}" \
+  pactl load-module module-null-sink norewinds=1 sink_name="${INPUT_SINK}" \
     format=s16 rate=48000 channels=2 > /dev/null  # ignore module ID
   # Use this as a dummy module to turn the monitor source, which Signal
   # Desktop ignores, into a non-monitor source
@@ -176,7 +176,7 @@ setup_linux()
     format=s16 rate=48000 channels=2 master="${INPUT_SINK}".monitor \
     master_channel_map=front-left,front-right \
     channel_map=front-left,front-right remix=false > /dev/null  # ignore ID
-  pactl load-module module-null-sink sink_name="${OUTPUT_SINK}" \
+  pactl load-module module-null-sink norewinds=1 sink_name="${OUTPUT_SINK}" \
     sink_properties=device.description="${OUTPUT_SINK}" \
     format=s16 rate=48000 channels=2 > /dev/null # ignore ID
 }
