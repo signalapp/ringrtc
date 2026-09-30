@@ -552,9 +552,7 @@ export class RingRTCType {
     ringId: bigint,
     reason: RingCancelReason | null
   ): void {
-    sillyDeadlockProtection(() => {
-      this.callManager.cancelGroupRing(groupId, ringId.toString(), reason);
-    });
+    this.callManager.cancelGroupRing(groupId, ringId.toString(), reason);
   }
 
   // Called by Rust
@@ -660,21 +658,19 @@ export class RingRTCType {
   }
 
   proceed(callId: CallId, settings: CallSettings): void {
-    sillyDeadlockProtection(() => {
-      this.callManager.proceed(
-        callId,
-        settings.iceServers,
-        settings.hideIp,
-        {
-          dataMode: settings.dataMode,
-          dredDuration: settings.dredDuration ?? 0,
-          enableVp9Encode: settings.enableVp9Encode ?? true,
-          enableVp9Decode: settings.enableVp9Decode ?? true,
-          statsIntervalSecs: settings.statsIntervalSecs,
-        },
-        settings.audioLevelsIntervalMillis || 0
-      );
-    });
+    this.callManager.proceed(
+      callId,
+      settings.iceServers,
+      settings.hideIp,
+      {
+        dataMode: settings.dataMode,
+        dredDuration: settings.dredDuration ?? 0,
+        enableVp9Encode: settings.enableVp9Encode ?? true,
+        enableVp9Decode: settings.enableVp9Decode ?? true,
+        statsIntervalSecs: settings.statsIntervalSecs,
+      },
+      settings.audioLevelsIntervalMillis || 0
+    );
   }
 
   // Called by Rust
@@ -996,14 +992,19 @@ export class RingRTCType {
   ): Promise<HttpResult<CallLinkState>> {
     const [requestId, promise] = this._callLinkRequests.add();
     // Response comes back via handleCallLinkResponse
-    sillyDeadlockProtection(() => {
+    try {
       this.callManager.readCallLink(
         requestId,
         sfuUrl,
         authCredentialPresentation,
         linkRootKey.bytes
       );
-    });
+    } catch (e) {
+      this._callLinkRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 
@@ -1053,7 +1054,7 @@ export class RingRTCType {
   ): Promise<HttpResult<CallLinkState>> {
     const [requestId, promise] = this._callLinkRequests.add();
     // Response comes back via handleCallLinkResponse
-    sillyDeadlockProtection(() => {
+    try {
       this.callManager.createCallLink(
         requestId,
         sfuUrl,
@@ -1063,7 +1064,12 @@ export class RingRTCType {
         callLinkPublicParams,
         restrictions
       );
-    });
+    } catch (e) {
+      this._callLinkRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 
@@ -1091,7 +1097,7 @@ export class RingRTCType {
   ): Promise<HttpResult<CallLinkState>> {
     const [requestId, promise] = this._callLinkRequests.add();
     // Response comes back via handleCallLinkResponse
-    sillyDeadlockProtection(() => {
+    try {
       this.callManager.updateCallLink(
         requestId,
         sfuUrl,
@@ -1102,7 +1108,12 @@ export class RingRTCType {
         undefined,
         undefined
       );
-    });
+    } catch (e) {
+      this._callLinkRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 
@@ -1131,7 +1142,7 @@ export class RingRTCType {
   ): Promise<HttpResult<CallLinkState>> {
     const [requestId, promise] = this._callLinkRequests.add();
     // Response comes back via handleCallLinkResponse
-    sillyDeadlockProtection(() => {
+    try {
       this.callManager.updateCallLink(
         requestId,
         sfuUrl,
@@ -1142,7 +1153,12 @@ export class RingRTCType {
         restrictions,
         undefined
       );
-    });
+    } catch (e) {
+      this._callLinkRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 
@@ -1168,7 +1184,7 @@ export class RingRTCType {
   ): Promise<HttpResult<undefined>> {
     const [requestId, promise] = this._emptyRequests.add();
     // Response comes back via handleCallLinkResponse
-    sillyDeadlockProtection(() => {
+    try {
       this.callManager.deleteCallLink(
         requestId,
         sfuUrl,
@@ -1176,7 +1192,12 @@ export class RingRTCType {
         linkRootKey.bytes,
         adminPasskey
       );
-    });
+    } catch (e) {
+      this._emptyRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 
@@ -1187,25 +1208,21 @@ export class RingRTCType {
     status: number,
     body: Uint8Array<ArrayBuffer>
   ): void {
-    sillyDeadlockProtection(() => {
-      try {
-        this.callManager.receivedHttpResponse(requestId, status, body);
-      } catch {
-        // We may not have an active connection any more.
-        // In which case it doesn't matter
-      }
-    });
+    try {
+      this.callManager.receivedHttpResponse(requestId, status, body);
+    } catch {
+      // We may not have an active connection any more.
+      // In which case it doesn't matter
+    }
   }
 
   httpRequestFailed(requestId: number, debugInfo: string | undefined): void {
-    sillyDeadlockProtection(() => {
-      try {
-        this.callManager.httpRequestFailed(requestId, debugInfo);
-      } catch {
-        // We may not have an active connection any more.
-        // In which case it doesn't matter
-      }
-    });
+    try {
+      this.callManager.httpRequestFailed(requestId, debugInfo);
+    } catch {
+      // We may not have an active connection any more.
+      // In which case it doesn't matter
+    }
   }
 
   // Group Calls
@@ -1295,14 +1312,19 @@ export class RingRTCType {
   ): Promise<PeekInfo> {
     const [requestId, promise] = this._peekRequests.add();
     // Response comes back via handlePeekResponse
-    sillyDeadlockProtection(() => {
+    try {
       this.callManager.peekGroupCall(
         requestId,
         sfuUrl,
         membershipProof,
         groupMembers
       );
-    });
+    } catch (e) {
+      this._peekRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise.then(result => {
       if (result.success) {
         return result.value;
@@ -1325,25 +1347,21 @@ export class RingRTCType {
   ): Promise<AudioDevice | undefined> {
     if (warmup) {
       const [requestId, promise] = this._audioDeviceRequests.add();
-      sillyDeadlockProtection(() => {
-        try {
-          this.callManager.setMicrophoneWarmupEnabled(warmup, requestId);
-        } catch (e) {
-          this._audioDeviceRequests.reject(
-            requestId,
-            e instanceof Error ? e : new Error(String(e))
-          );
-        }
-      });
+      try {
+        this.callManager.setMicrophoneWarmupEnabled(warmup, requestId);
+      } catch (e) {
+        this._audioDeviceRequests.reject(
+          requestId,
+          e instanceof Error ? e : new Error(String(e))
+        );
+      }
       return promise;
     }
-    sillyDeadlockProtection(() => {
-      try {
-        this.callManager.setMicrophoneWarmupEnabled(warmup, 0);
-      } catch (e) {
-        this.logWarn(`Failed to stop microphone warmup: ${e}`);
-      }
-    });
+    try {
+      this.callManager.setMicrophoneWarmupEnabled(warmup, 0);
+    } catch (e) {
+      this.logWarn(`Failed to stop microphone warmup: ${e}`);
+    }
     // In general we don't plumb through "stop recording" results because there's
     // nothing that the client can do with a failure there. Just resolve this right away.
     return Promise.resolve(undefined);
@@ -1357,41 +1375,42 @@ export class RingRTCType {
   ): Promise<HttpResult<PeekInfo>> {
     const [requestId, promise] = this._peekRequests.add();
     // Response comes back via handlePeekResponse
-    sillyDeadlockProtection(() => {
+    try {
       this.callManager.peekCallLinkCall(
         requestId,
         sfuUrl,
         authCredentialPresentation,
         rootKey.bytes
       );
-    });
+    } catch (e) {
+      this._peekRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 
   // Called by Rust
   requestMembershipProof(clientId: GroupCallClientId): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (!groupCall) {
-        this.logError('requestMembershipProof(): GroupCall not found in map!');
-        return;
-      }
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (!groupCall) {
+      this.logError('requestMembershipProof(): GroupCall not found in map!');
+      return;
+    }
 
-      groupCall.requestMembershipProof();
-    });
+    groupCall.requestMembershipProof();
   }
 
   // Called by Rust
   requestGroupMembers(clientId: GroupCallClientId): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (!groupCall) {
-        this.logError('requestGroupMembers(): GroupCall not found in map!');
-        return;
-      }
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (!groupCall) {
+      this.logError('requestGroupMembers(): GroupCall not found in map!');
+      return;
+    }
 
-      groupCall.requestGroupMembers();
-    });
+    groupCall.requestGroupMembers();
   }
 
   // Called by Rust
@@ -1399,17 +1418,15 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     connectionState: ConnectionState
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (!groupCall) {
-        this.logError(
-          'handleConnectionStateChanged(): GroupCall not found in map!'
-        );
-        return;
-      }
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (!groupCall) {
+      this.logError(
+        'handleConnectionStateChanged(): GroupCall not found in map!'
+      );
+      return;
+    }
 
-      groupCall.handleConnectionStateChanged(connectionState);
-    });
+    groupCall.handleConnectionStateChanged(connectionState);
   }
 
   // Called by Rust
@@ -1418,15 +1435,13 @@ export class RingRTCType {
     joinState: JoinState,
     demuxId: number | undefined
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (!groupCall) {
-        this.logError('handleJoinStateChanged(): GroupCall not found in map!');
-        return;
-      }
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (!groupCall) {
+      this.logError('handleJoinStateChanged(): GroupCall not found in map!');
+      return;
+    }
 
-      groupCall.handleJoinStateChanged(joinState, demuxId);
-    });
+    groupCall.handleJoinStateChanged(joinState, demuxId);
   }
 
   // Called by Rust
@@ -1434,17 +1449,13 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     localNetworkAdapterType: NetworkAdapterType
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (!groupCall) {
-        this.logError(
-          'handleNetworkRouteChanged(): GroupCall not found in map!'
-        );
-        return;
-      }
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (!groupCall) {
+      this.logError('handleNetworkRouteChanged(): GroupCall not found in map!');
+      return;
+    }
 
-      groupCall.handleNetworkRouteChanged(localNetworkAdapterType);
-    });
+    groupCall.handleNetworkRouteChanged(localNetworkAdapterType);
   }
 
   // Called by Rust
@@ -1453,12 +1464,10 @@ export class RingRTCType {
     capturedLevel: RawAudioLevel,
     receivedLevels: Array<ReceivedAudioLevel>
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (groupCall) {
-        groupCall.handleAudioLevels(capturedLevel, receivedLevels);
-      }
-    });
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (groupCall) {
+      groupCall.handleAudioLevels(capturedLevel, receivedLevels);
+    }
   }
 
   // Called by Rust
@@ -1466,12 +1475,10 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     recovered: boolean
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (groupCall) {
-        groupCall.handleLowBandwidthForVideo(recovered);
-      }
-    });
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (groupCall) {
+      groupCall.handleLowBandwidthForVideo(recovered);
+    }
   }
 
   // Called by Rust
@@ -1479,12 +1486,10 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     reactions: Array<Reaction>
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (groupCall) {
-        groupCall.handleReactions(reactions);
-      }
-    });
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (groupCall) {
+      groupCall.handleReactions(reactions);
+    }
   }
 
   // Called by Rust
@@ -1492,12 +1497,10 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     raisedHands: Array<number>
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (groupCall) {
-        groupCall.handleRaisedHands(raisedHands);
-      }
-    });
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (groupCall) {
+      groupCall.handleRaisedHands(raisedHands);
+    }
   }
 
   // Called by Rust
@@ -1505,31 +1508,27 @@ export class RingRTCType {
     clientId: GroupCallClientId,
     remoteDeviceStates: Array<RemoteDeviceState>
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (!groupCall) {
-        this.logError(
-          'handleRemoteDevicesChanged(): GroupCall not found in map!'
-        );
-        return;
-      }
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (!groupCall) {
+      this.logError(
+        'handleRemoteDevicesChanged(): GroupCall not found in map!'
+      );
+      return;
+    }
 
-      groupCall.handleRemoteDevicesChanged(remoteDeviceStates);
-    });
+    groupCall.handleRemoteDevicesChanged(remoteDeviceStates);
   }
 
   // Called by Rust
   handlePeekChanged(clientId: GroupCallClientId, rawInfo: RawPeekInfo): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (!groupCall) {
-        this.logError('handlePeekChanged(): GroupCall not found in map!');
-        return;
-      }
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (!groupCall) {
+      this.logError('handlePeekChanged(): GroupCall not found in map!');
+      return;
+    }
 
-      const info = rawPeekInfoToPeekInfo(rawInfo);
-      groupCall.handlePeekChanged(info);
-    });
+    const info = rawPeekInfoToPeekInfo(rawInfo);
+    groupCall.handlePeekChanged(info);
   }
 
   // Called by Rust
@@ -1538,18 +1537,16 @@ export class RingRTCType {
     statusCode: number,
     rawInfo: RawPeekInfo | undefined
   ): void {
-    sillyDeadlockProtection(() => {
-      let result: HttpResult<PeekInfo>;
-      if (rawInfo) {
-        const info = rawPeekInfoToPeekInfo(rawInfo);
-        result = { success: true, value: info };
-      } else {
-        result = { success: false, errorStatusCode: statusCode };
-      }
-      if (!this._peekRequests.resolve(requestId, result)) {
-        this.logWarn(`Invalid request ID for handlePeekResponse: ${requestId}`);
-      }
-    });
+    let result: HttpResult<PeekInfo>;
+    if (rawInfo) {
+      const info = rawPeekInfoToPeekInfo(rawInfo);
+      result = { success: true, value: info };
+    } else {
+      result = { success: false, errorStatusCode: statusCode };
+    }
+    if (!this._peekRequests.resolve(requestId, result)) {
+      this.logWarn(`Invalid request ID for handlePeekResponse: ${requestId}`);
+    }
   }
 
   // Called by Rust
@@ -1558,24 +1555,22 @@ export class RingRTCType {
     statusCode: number,
     state: RawCallLinkState | undefined
   ): void {
-    sillyDeadlockProtection(() => {
-      // Recreate the state so that we have the correct prototype, in case we add more methods to CallLinkState.
-      let result: HttpResult<CallLinkState>;
-      const s = rawCallLinkStateToCallLinkState(state);
-      if (s) {
-        result = {
-          success: true,
-          value: s,
-        };
-      } else {
-        result = { success: false, errorStatusCode: statusCode };
-      }
-      if (!this._callLinkRequests.resolve(requestId, result)) {
-        this.logWarn(
-          `Invalid request ID for handleCallLinkResponse: ${requestId}`
-        );
-      }
-    });
+    // Recreate the state so that we have the correct prototype, in case we add more methods to CallLinkState.
+    let result: HttpResult<CallLinkState>;
+    const s = rawCallLinkStateToCallLinkState(state);
+    if (s) {
+      result = {
+        success: true,
+        value: s,
+      };
+    } else {
+      result = { success: false, errorStatusCode: statusCode };
+    }
+    if (!this._callLinkRequests.resolve(requestId, result)) {
+      this.logWarn(
+        `Invalid request ID for handleCallLinkResponse: ${requestId}`
+      );
+    }
   }
 
   // Called by Rust
@@ -1584,19 +1579,15 @@ export class RingRTCType {
     statusCode: number,
     state: EmptyObj | undefined
   ): void {
-    sillyDeadlockProtection(() => {
-      let result: HttpResult<undefined>;
-      if (state !== undefined) {
-        result = { success: true, value: undefined };
-      } else {
-        result = { success: false, errorStatusCode: statusCode };
-      }
-      if (!this._emptyRequests.resolve(requestId, result)) {
-        this.logWarn(
-          `Invalid request ID for handleEmptyResponse: ${requestId}`
-        );
-      }
-    });
+    let result: HttpResult<undefined>;
+    if (state !== undefined) {
+      result = { success: true, value: undefined };
+    } else {
+      result = { success: false, errorStatusCode: statusCode };
+    }
+    if (!this._emptyRequests.resolve(requestId, result)) {
+      this.logWarn(`Invalid request ID for handleEmptyResponse: ${requestId}`);
+    }
   }
 
   // Called by Rust
@@ -1605,17 +1596,15 @@ export class RingRTCType {
     reason: CallEndReason,
     summary: CallSummary
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (!groupCall) {
-        this.logError('handleEnded(): GroupCall not found in map!');
-        return;
-      }
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (!groupCall) {
+      this.logError('handleEnded(): GroupCall not found in map!');
+      return;
+    }
 
-      this._groupCallByClientId.delete(clientId);
+    this._groupCallByClientId.delete(clientId);
 
-      groupCall.handleEnded(reason, summary);
-    });
+    groupCall.handleEnded(reason, summary);
   }
 
   // Called by Rust
@@ -1625,13 +1614,11 @@ export class RingRTCType {
     sender: GroupCallUserId,
     state: RingUpdate
   ): void {
-    sillyDeadlockProtection(() => {
-      if (this.handleGroupCallRingUpdate) {
-        this.handleGroupCallRingUpdate(groupId, ringId, sender, state);
-      } else {
-        this.logError('RingRTC.handleGroupCallRingUpdate is not set!');
-      }
-    });
+    if (this.handleGroupCallRingUpdate) {
+      this.handleGroupCallRingUpdate(groupId, ringId, sender, state);
+    } else {
+      this.logError('RingRTC.handleGroupCallRingUpdate is not set!');
+    }
   }
 
   // Called by Rust
@@ -1643,22 +1630,18 @@ export class RingRTCType {
 
   // Called by Rust
   handleSpeechEvent(clientId: GroupCallClientId, event: SpeechEvent): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (groupCall) {
-        groupCall.handleSpeechEvent(event);
-      }
-    });
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (groupCall) {
+      groupCall.handleSpeechEvent(event);
+    }
   }
 
   // Called by Rust
   onRemoteMute(clientId: GroupCallClientId, demuxId: number): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (groupCall) {
-        groupCall.onRemoteMute(demuxId);
-      }
-    });
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (groupCall) {
+      groupCall.onRemoteMute(demuxId);
+    }
   }
 
   // Called by Rust.
@@ -1667,12 +1650,10 @@ export class RingRTCType {
     sourceDemuxId: number,
     targetDemuxId: number
   ): void {
-    sillyDeadlockProtection(() => {
-      const groupCall = this._groupCallByClientId.get(clientId);
-      if (groupCall) {
-        groupCall.onObservedRemoteMute(sourceDemuxId, targetDemuxId);
-      }
-    });
+    const groupCall = this._groupCallByClientId.get(clientId);
+    if (groupCall) {
+      groupCall.onObservedRemoteMute(sourceDemuxId, targetDemuxId);
+    }
   }
 
   // Called by Rust
@@ -2055,16 +2036,14 @@ export class RingRTCType {
 
   setAudioInputById(id: string): Promise<AudioDevice | undefined> {
     const [requestId, promise] = this._audioDeviceRequests.add();
-    sillyDeadlockProtection(() => {
-      try {
-        this.callManager.setAudioInputById(id, requestId);
-      } catch (e) {
-        this._audioDeviceRequests.reject(
-          requestId,
-          e instanceof Error ? e : new Error(String(e))
-        );
-      }
-    });
+    try {
+      this.callManager.setAudioInputById(id, requestId);
+    } catch (e) {
+      this._audioDeviceRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 
@@ -2078,16 +2057,14 @@ export class RingRTCType {
 
   setAudioOutputById(id: string): Promise<AudioDevice | undefined> {
     const [requestId, promise] = this._audioDeviceRequests.add();
-    sillyDeadlockProtection(() => {
-      try {
-        this.callManager.setAudioOutputById(id, requestId);
-      } catch (e) {
-        this._audioDeviceRequests.reject(
-          requestId,
-          e instanceof Error ? e : new Error(String(e))
-        );
-      }
-    });
+    try {
+      this.callManager.setAudioOutputById(id, requestId);
+    } catch (e) {
+      this._audioDeviceRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 
@@ -2105,16 +2082,14 @@ export class RingRTCType {
     enabled: boolean
   ): Promise<AudioDevice | undefined> {
     const [requestId, promise] = this._audioDeviceRequests.add();
-    sillyDeadlockProtection(() => {
-      try {
-        this.callManager.setVoiceProcessingEnabled(enabled, requestId);
-      } catch (e) {
-        this._audioDeviceRequests.reject(
-          requestId,
-          e instanceof Error ? e : new Error(String(e))
-        );
-      }
-    });
+    try {
+      this.callManager.setVoiceProcessingEnabled(enabled, requestId);
+    } catch (e) {
+      this._audioDeviceRequests.reject(
+        requestId,
+        e instanceof Error ? e : new Error(String(e))
+      );
+    }
     return promise;
   }
 }
@@ -2406,7 +2381,7 @@ export class Call {
     if (state === CallState.Accepted) {
       // We might have been in the reconnecting state and already started media.
       if (!this._mediaSessionStarted) {
-        sillyDeadlockProtection(() => {
+        try {
           // Set the audio state to the latest setting from the UX.
           this._callManager.setOutgoingAudioEnabled(this._outgoingAudioEnabled);
 
@@ -2416,15 +2391,19 @@ export class Call {
           } else if (this._outgoingVideoEnabled) {
             this._callManager.setOutgoingVideoEnabled(true);
           }
-        });
+        } catch {
+          // Don't let a media failure stop the state change from being reported.
+        }
         this._mediaSessionStarted = true;
       }
     } else if (state === CallState.Ended) {
-      sillyDeadlockProtection(() => {
+      try {
         this._callManager.setOutgoingAudioEnabled(false);
         this._callManager.setOutgoingVideoEnabled(false);
         this._callManager.setMicrophoneWarmupEnabled(false, 0);
-      });
+      } catch {
+        // Don't let a media failure stop the state change from being reported.
+      }
       this._outgoingAudioEnabled = false;
       this._outgoingVideoEnabled = false;
       this._outgoingVideoIsScreenShare = false;
@@ -2453,9 +2432,7 @@ export class Call {
   }
 
   hangup(): void {
-    sillyDeadlockProtection(() => {
-      this._callManager.hangup();
-    });
+    this._callManager.hangup();
   }
 
   get remoteAudioEnabled(): boolean {
@@ -2479,9 +2456,7 @@ export class Call {
 
     if (this._mediaSessionStarted && this._outgoingAudioEnabled !== enabled) {
       this._outgoingAudioEnabled = enabled;
-      sillyDeadlockProtection(() => {
-        this._callManager.setOutgoingAudioEnabled(enabled);
-      });
+      this._callManager.setOutgoingAudioEnabled(enabled);
     } else {
       this._outgoingAudioEnabled = enabled;
     }
@@ -2492,9 +2467,7 @@ export class Call {
 
     if (this._mediaSessionStarted && this._outgoingVideoEnabled !== enabled) {
       this._outgoingVideoEnabled = enabled;
-      sillyDeadlockProtection(() => {
-        this._callManager.setOutgoingVideoEnabled(enabled);
-      });
+      this._callManager.setOutgoingVideoEnabled(enabled);
     } else {
       this._outgoingVideoEnabled = enabled;
     }
@@ -2506,9 +2479,7 @@ export class Call {
       this._outgoingVideoIsScreenShare !== isScreenShare
     ) {
       this._outgoingVideoIsScreenShare = isScreenShare;
-      sillyDeadlockProtection(() => {
-        this._callManager.setOutgoingVideoIsScreenShare(isScreenShare);
-      });
+      this._callManager.setOutgoingVideoIsScreenShare(isScreenShare);
     } else {
       this._outgoingVideoIsScreenShare = isScreenShare;
     }
@@ -2534,14 +2505,12 @@ export class Call {
   }
 
   updateDataMode(dataMode: DataMode): void {
-    sillyDeadlockProtection(() => {
-      try {
-        this._callManager.updateDataMode(dataMode);
-      } catch {
-        // We may not have an active connection any more.
-        // In which case it doesn't matter
-      }
-    });
+    try {
+      this._callManager.updateDataMode(dataMode);
+    } catch {
+      // We may not have an active connection any more.
+      // In which case it doesn't matter
+    }
   }
 }
 
@@ -3634,13 +3603,4 @@ export enum CallLogLevel {
   Info,
   Debug,
   Trace,
-}
-
-function sillyDeadlockProtection(f: () => void) {
-  void (async () => {
-    // Yield so f() runs after unwinding the calling stack.
-    await Promise.resolve();
-
-    f();
-  })();
 }
