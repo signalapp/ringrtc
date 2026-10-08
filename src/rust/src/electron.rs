@@ -49,7 +49,8 @@ use crate::{
         media::{AudioTrack, VideoFrame, VideoPixelFormat, VideoSink, VideoSource, VideoTrack},
         peer_connection::AudioLevel,
         peer_connection_factory::{
-            self as pcf, AudioDevice, AudioDeviceObserver, IceServer, PeerConnectionFactory,
+            self as pcf, AudioDevice, AudioDeviceList, AudioDeviceObserver, DefaultAudioDevice,
+            IceServer, PeerConnectionFactory, SetAudioWarmup,
         },
         peer_connection_observer::NetworkRoute,
     },
@@ -122,6 +123,12 @@ impl log::Log for Log {
     }
 
     fn flush(&self) {}
+}
+
+#[derive(Debug, Clone)]
+pub struct AudioCallbackSettle {
+    success: bool,
+    audio_device: Option<AudioDevice>,
 }
 
 // When JavaScript processes events, we want everything to go through a common queue that
@@ -197,8 +204,15 @@ pub enum Event {
         peer_id: PeerId,
         recovered: bool,
     },
-    OutputDeviceChanged(Vec<Option<AudioDevice>>),
-    InputDeviceChanged(Vec<Option<AudioDevice>>),
+    OutputDeviceChanged(AudioDeviceList),
+    InputDeviceChanged(AudioDeviceList),
+    SettlePlaybackStart(AudioCallbackSettle),
+    SettleAudioPromise {
+        success: bool,
+        audio_device: Option<AudioDevice>,
+        request_id: u32,
+    },
+    SettleRecordingStart(AudioCallbackSettle),
 }
 
 /// Wraps a [`std::sync::mpsc::Sender`] with a callback to report new events.
@@ -374,7 +388,7 @@ pub struct ElectronAudioDeviceObserver {
     event_reporter: EventReporter,
 }
 impl AudioDeviceObserver for ElectronAudioDeviceObserver {
-    fn output_changed(&self, devices: Vec<Option<AudioDevice>>) {
+    fn output_changed(&self, devices: AudioDeviceList) {
         if let Err(e) = self
             .event_reporter
             .send(Event::OutputDeviceChanged(devices))
@@ -383,9 +397,47 @@ impl AudioDeviceObserver for ElectronAudioDeviceObserver {
         }
     }
 
-    fn input_changed(&self, devices: Vec<Option<AudioDevice>>) {
+    fn input_changed(&self, devices: AudioDeviceList) {
         if let Err(e) = self.event_reporter.send(Event::InputDeviceChanged(devices)) {
             error!("Failed to report input device change! {}", e);
+        }
+    }
+
+    fn settle_start_playback_via_callback(&self, success: bool, audio_device: Option<AudioDevice>) {
+        if let Err(e) = self
+            .event_reporter
+            .send(Event::SettlePlaybackStart(AudioCallbackSettle {
+                success,
+                audio_device,
+            }))
+        {
+            error!("Failed to report start playback result: {e}");
+        }
+    }
+
+    fn settle_promise(&self, success: bool, audio_device: Option<AudioDevice>, request_id: u32) {
+        if let Err(e) = self.event_reporter.send(Event::SettleAudioPromise {
+            success,
+            audio_device,
+            request_id,
+        }) {
+            error!("Failed to report audio promise result: {e}");
+        }
+    }
+
+    fn settle_start_recording_via_callback(
+        &self,
+        success: bool,
+        audio_device: Option<AudioDevice>,
+    ) {
+        if let Err(e) = self
+            .event_reporter
+            .send(Event::SettleRecordingStart(AudioCallbackSettle {
+                success,
+                audio_device,
+            }))
+        {
+            error!("Failed to report start recording result: {e}");
         }
     }
 }
@@ -1325,6 +1377,16 @@ fn httpRequestFailed(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(cx.undefined().upcast())
 }
 
+// It would be nice to have a promise / request_id here, but that would raise
+// questions about when to settle it.
+//
+// In cases where we're not in a call we could settle right away, but in cases
+// where we already are in a call a change won't necessarily result in an ADM
+// call (for example, disabling audio transmission is handled at the WebRTC layer,
+// but we keep the microphone stream open).
+//
+// Instead, we will have a separate error callback that may fire shortly after a
+// call to this method **if** WebRTC does issue an ADM call.
 #[allow(non_snake_case)]
 fn setOutgoingAudioEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
@@ -1348,10 +1410,17 @@ fn setOutgoingAudioEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn setMicrophoneWarmupEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
-    info!("setMicrophoneWarmupEnabled({})", enabled);
+    let request_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32;
+    info!("setMicrophoneWarmupEnabled({enabled}, {request_id})");
+
+    let param = if enabled {
+        SetAudioWarmup::Enable(request_id)
+    } else {
+        SetAudioWarmup::Disable
+    };
 
     with_call_endpoint(&mut cx, |endpoint| {
-        endpoint.peer_connection_factory.set_audio_warmup(enabled)
+        endpoint.peer_connection_factory.set_audio_warmup(param)
     })
     .or_else(|err: anyhow::Error| cx.throw_error(format!("{}", err)))?;
     Ok(cx.undefined().upcast())
@@ -2296,83 +2365,71 @@ fn deleteCallLink(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(cx.undefined().upcast())
 }
 
+// TODO(mutexlox): consider using a Promise / request_id here
+// If we remove the 5-second poll in the Desktop client, we could plumb every call of this back to
+// an (async) OS API call, which settles a promise.
 #[allow(non_snake_case)]
 fn getAudioInputs(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let devices = with_call_endpoint(&mut cx, |endpoint| {
+    if let Ok(devices) = with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .peer_connection_factory
             .get_audio_recording_devices()
-    })
-    .unwrap_or_else(|_| Vec::<AudioDevice>::new());
-
-    let js_devices = JsArray::new(&mut cx, devices.len());
-    for (i, device) in devices.iter().enumerate() {
-        let js_device = JsObject::new(&mut cx);
-        let name = cx.string(device.name.clone());
-        js_device.set(&mut cx, "name", name)?;
-        let unique_id = cx.string(device.unique_id.clone());
-        js_device.set(&mut cx, "uniqueId", unique_id)?;
-        let index = cx.number(i as f64);
-        js_device.set(&mut cx, "index", index)?;
-        if !device.i18n_key.is_empty() {
-            let i18n_key = cx.string(device.i18n_key.clone());
-            js_device.set(&mut cx, "i18nKey", i18n_key)?;
-        }
-        js_devices.set(&mut cx, i as u32, js_device)?;
+    }) {
+        let js_device_list = device_list_to_js(&mut cx, &devices)?;
+        Ok(js_device_list.upcast())
+    } else {
+        Ok(cx.undefined().upcast())
     }
-    Ok(js_devices.upcast())
 }
 
 #[allow(non_snake_case)]
-fn setAudioInput(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let index = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+fn setAudioInputById(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let id = cx.argument::<JsString>(0)?.value(&mut cx);
+    let request_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32;
     match with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .peer_connection_factory
-            .set_audio_recording_device(index)
+            .set_audio_recording_device_by_id(&id, request_id)
     }) {
         Ok(_) => (),
-        Err(err) => error!("setAudioInput failed: {}", err),
+        Err(err) => {
+            error!("setAudioInputById failed: {}", err);
+            cx.throw_error(format!("setAudioInputById: {}", err))?;
+        }
     };
 
     Ok(cx.undefined().upcast())
 }
 
+// TODO(mutexlox): consider using a Promise / request_id here
+// If we remove the 5-second poll in the Desktop client, we could plumb every call of this back to
+// an (async) OS API call, which settles a promise.
 #[allow(non_snake_case)]
 fn getAudioOutputs(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let devices = with_call_endpoint(&mut cx, |endpoint| {
+    if let Ok(devices) = with_call_endpoint(&mut cx, |endpoint| {
         endpoint.peer_connection_factory.get_audio_playout_devices()
-    })
-    .unwrap_or_else(|_| Vec::<AudioDevice>::new());
-
-    let js_devices = JsArray::new(&mut cx, devices.len());
-    for (i, device) in devices.iter().enumerate() {
-        let js_device = JsObject::new(&mut cx);
-        let name = cx.string(device.name.clone());
-        js_device.set(&mut cx, "name", name)?;
-        let unique_id = cx.string(device.unique_id.clone());
-        js_device.set(&mut cx, "uniqueId", unique_id)?;
-        let index = cx.number(i as f64);
-        js_device.set(&mut cx, "index", index)?;
-        if !device.i18n_key.is_empty() {
-            let i18n_key = cx.string(device.i18n_key.clone());
-            js_device.set(&mut cx, "i18nKey", i18n_key)?;
-        }
-        js_devices.set(&mut cx, i as u32, js_device)?;
+    }) {
+        let js_device_list = device_list_to_js(&mut cx, &devices)?;
+        Ok(js_device_list.upcast())
+    } else {
+        Ok(cx.undefined().upcast())
     }
-    Ok(js_devices.upcast())
 }
 
 #[allow(non_snake_case)]
-fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
-    let index = cx.argument::<JsNumber>(0)?.value(&mut cx) as usize;
+fn setAudioOutputById(mut cx: FunctionContext) -> JsResult<JsValue> {
+    let id = cx.argument::<JsString>(0)?.value(&mut cx);
+    let request_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32;
     match with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .peer_connection_factory
-            .set_audio_playout_device(index)
+            .set_audio_playout_device_by_id(&id, request_id)
     }) {
         Ok(_) => (),
-        Err(err) => error!("setAudioOutput failed: {}", err),
+        Err(err) => {
+            error!("setAudioOutputById failed: {}", err);
+            cx.throw_error(format!("setAudioOutputById: {}", err))?;
+        }
     };
 
     Ok(cx.undefined().upcast())
@@ -2381,15 +2438,19 @@ fn setAudioOutput(mut cx: FunctionContext) -> JsResult<JsValue> {
 #[allow(non_snake_case)]
 fn setVoiceProcessingEnabled(mut cx: FunctionContext) -> JsResult<JsValue> {
     let enabled = cx.argument::<JsBoolean>(0)?.value(&mut cx);
-    info!("setVoiceProcessingEnabled(): {:?}", enabled);
+    let request_id = cx.argument::<JsNumber>(1)?.value(&mut cx) as u32;
+    info!("setVoiceProcessingEnabled({enabled}, {request_id})");
 
     match with_call_endpoint(&mut cx, |endpoint| {
         endpoint
             .peer_connection_factory
-            .set_input_voice_processing_enabled(enabled)
+            .set_input_voice_processing_enabled(enabled, request_id)
     }) {
         Ok(_) => (),
-        Err(err) => error!("setVoiceProcessingEnabled failed: {}", err),
+        Err(err) => {
+            error!("setVoiceProcessingEnabled failed: {err}");
+            cx.throw_error(format!("setVoiceProcessingEnabled: {err}"))?;
+        }
     };
 
     Ok(cx.undefined().upcast())
@@ -2408,29 +2469,86 @@ fn setRtcStatsInterval(mut cx: FunctionContext) -> JsResult<JsValue> {
     Ok(cx.undefined().upcast())
 }
 
-fn devices_to_js_array<'a>(
-    cx: &mut FunctionContext<'a>,
-    devices: Vec<Option<AudioDevice>>,
-) -> JsResult<'a, JsArray> {
-    // Maintain original indices as the ADM sees them.
-    let devices_filtered = devices
-        .into_iter()
-        .enumerate()
-        .filter_map(|(i, d)| d.map(|dev| (i, dev)))
-        .collect::<Vec<_>>();
-    let js_devices = JsArray::new(cx, devices_filtered.len());
-    for (i, (adm_index, device)) in devices_filtered.into_iter().enumerate() {
-        let js_info = cx.empty_object();
-        let js_name = cx.string(&device.name);
-        js_info.set(cx, "name", js_name)?;
-        let js_unique_id = cx.string(&device.unique_id);
-        js_info.set(cx, "uniqueId", js_unique_id)?;
-        let js_index = cx.number(adm_index as f64);
-        js_info.set(cx, "index", js_index)?;
+fn audio_device_to_js_object<'a, T>(cx: &mut T, device: &AudioDevice) -> JsResult<'a, JsObject>
+where
+    T: Context<'a>,
+{
+    let js_device = cx.empty_object();
+    let js_name = cx.string(&device.name);
+    js_device.set(cx, "name", js_name)?;
+    let js_unique_id = cx.string(&device.unique_id);
+    js_device.set(cx, "uniqueId", js_unique_id)?;
+    Ok(js_device)
+}
 
-        js_devices.set(cx, i as u32, js_info)?;
+fn defaults_to_js<'a>(
+    cx: &mut FunctionContext<'a>,
+    defaults: &DefaultAudioDevice,
+) -> JsResult<'a, JsObject> {
+    let js_default = cx.empty_object();
+    match defaults {
+        DefaultAudioDevice::Windows(win) => {
+            let js_is_win = cx.boolean(true);
+            js_default.set(cx, "isWindows", js_is_win)?;
+            if let Some(console) = &win.console_device {
+                let js_audio_device = audio_device_to_js_object(cx, console)?;
+                js_default.set(cx, "consoleDevice", js_audio_device)?;
+            }
+            if let Some(communications) = &win.communications_device {
+                let js_audio_device = audio_device_to_js_object(cx, communications)?;
+                js_default.set(cx, "communicationsDevice", js_audio_device)?;
+            }
+        }
+        DefaultAudioDevice::NonWindows(non_win) => {
+            let js_is_win = cx.boolean(false);
+            js_default.set(cx, "isWindows", js_is_win)?;
+            if let Some(device) = non_win {
+                let js_audio_device = audio_device_to_js_object(cx, device)?;
+                js_default.set(cx, "device", js_audio_device)?;
+            }
+        }
     }
-    Ok(js_devices)
+
+    Ok(js_default)
+}
+
+fn device_list_to_js<'a>(
+    cx: &mut FunctionContext<'a>,
+    devices: &AudioDeviceList,
+) -> JsResult<'a, JsObject> {
+    let js_audio_device_list = cx.empty_object();
+
+    let js_devices = JsArray::new(cx, devices.list.len());
+    for (i, device) in devices.list.iter().enumerate() {
+        let audio_device = audio_device_to_js_object(cx, device)?;
+        js_devices.set(cx, i as u32, audio_device)?;
+    }
+    js_audio_device_list.set(cx, "devices", js_devices)?;
+
+    let defaults = defaults_to_js(cx, &devices.default)?;
+    js_audio_device_list.set(cx, "defaults", defaults)?;
+
+    Ok(js_audio_device_list)
+}
+
+fn report_audio_method_result_callback<'a>(
+    cx: &mut FunctionContext<'a>,
+    observer: Handle<JsObject>,
+    method_name: &str,
+    settle_state: AudioCallbackSettle,
+) -> JsResult<'a, JsValue> {
+    let success_js = cx.boolean(settle_state.success).upcast();
+
+    let args = if let Some(device) = settle_state.audio_device {
+        let js_info = audio_device_to_js_object(cx, &device)?;
+        [success_js, js_info.upcast()]
+    } else {
+        [success_js, cx.undefined().upcast()]
+    };
+    let method = observer.get::<JsFunction, _, _>(cx, method_name)?;
+    method.call(cx, observer, args)?;
+
+    Ok(cx.undefined().upcast())
 }
 
 #[allow(non_snake_case)]
@@ -3152,17 +3270,51 @@ fn processEvents(mut cx: FunctionContext) -> JsResult<JsValue> {
             }
             Event::OutputDeviceChanged(devices) => {
                 let method_name = "onOutputDeviceChanged";
-                let js_devices = devices_to_js_array(&mut cx, devices)?;
-                let args = [js_devices.upcast()];
+                let js_device_list = device_list_to_js(&mut cx, &devices)?;
+                let args = [js_device_list.upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
             }
             Event::InputDeviceChanged(devices) => {
                 let method_name = "onInputDeviceChanged";
-                let js_devices = devices_to_js_array(&mut cx, devices)?;
-                let args = [js_devices.upcast()];
+                let js_device_list = device_list_to_js(&mut cx, &devices)?;
+                let args = [js_device_list.upcast()];
                 let method = observer.get::<JsFunction, _, _>(&mut cx, method_name)?;
                 method.call(&mut cx, observer, args)?;
+            }
+            Event::SettlePlaybackStart(settle_state) => {
+                report_audio_method_result_callback(
+                    &mut cx,
+                    observer,
+                    "onSettleStartPlayback",
+                    settle_state,
+                )?;
+            }
+            Event::SettleAudioPromise {
+                success,
+                audio_device,
+                request_id,
+            } => {
+                let success_js = cx.boolean(success).upcast();
+
+                let request_id_js = cx.number(request_id).upcast();
+
+                let args = if let Some(device) = audio_device {
+                    let js_info = audio_device_to_js_object(&mut cx, &device)?;
+                    [success_js, js_info.upcast(), request_id_js]
+                } else {
+                    [success_js, cx.undefined().upcast(), request_id_js]
+                };
+                let method = observer.get::<JsFunction, _, _>(&mut cx, "onSettleAudioPromise")?;
+                method.call(&mut cx, observer, args)?;
+            }
+            Event::SettleRecordingStart(settle_state) => {
+                report_audio_method_result_callback(
+                    &mut cx,
+                    observer,
+                    "onSettleStartRecording",
+                    settle_state,
+                )?;
             }
         }
     }
@@ -3334,9 +3486,9 @@ fn register(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("cm_updateCallLink", updateCallLink)?;
     cx.export_function("cm_deleteCallLink", deleteCallLink)?;
     cx.export_function("cm_getAudioInputs", getAudioInputs)?;
-    cx.export_function("cm_setAudioInput", setAudioInput)?;
+    cx.export_function("cm_setAudioInputById", setAudioInputById)?;
     cx.export_function("cm_getAudioOutputs", getAudioOutputs)?;
-    cx.export_function("cm_setAudioOutput", setAudioOutput)?;
+    cx.export_function("cm_setAudioOutputById", setAudioOutputById)?;
     cx.export_function("cm_setVoiceProcessingEnabled", setVoiceProcessingEnabled)?;
     cx.export_function("cm_setRtcStatsInterval", setRtcStatsInterval)?;
     cx.export_function("cm_processEvents", processEvents)?;

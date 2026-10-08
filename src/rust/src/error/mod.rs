@@ -67,9 +67,6 @@ pub enum RingRtcError {
     CreateVideoTrack,
     #[error("Unable to create C++ AudioTrack")]
     CreateAudioTrack,
-    #[error("Unable to query Audio Devices")]
-    #[allow(dead_code)]
-    QueryAudioDevices,
     #[allow(dead_code)]
     #[error("Unable to set Audio Device")]
     SetAudioDevice,

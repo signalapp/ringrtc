@@ -7,6 +7,10 @@ import { RingRTCType } from './ringrtc/Service';
 
 export type {
   AudioDevice,
+  AudioDeviceInitError,
+  AudioDeviceList,
+  WindowsDefaultAudioDevices,
+  NonWindowsDefaultAudioDevice,
   CallId,
   CallSettings,
   DeviceId,
@@ -55,6 +59,9 @@ export {
   VideoRequest,
   callIdFromEra,
   callIdFromRingId,
+  cleanAudioDeviceForLogging,
+  cleanAudioDeviceListForLogging,
+  truncateForLogging,
 } from './ringrtc/Service';
 
 export {

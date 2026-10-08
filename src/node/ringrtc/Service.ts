@@ -152,10 +152,12 @@ class NativeCallManager {
 (NativeCallManager.prototype as any).peekCallLinkCall =
   Native.cm_peekCallLinkCall;
 (NativeCallManager.prototype as any).getAudioInputs = Native.cm_getAudioInputs;
-(NativeCallManager.prototype as any).setAudioInput = Native.cm_setAudioInput;
+(NativeCallManager.prototype as any).setAudioInputById =
+  Native.cm_setAudioInputById;
 (NativeCallManager.prototype as any).getAudioOutputs =
   Native.cm_getAudioOutputs;
-(NativeCallManager.prototype as any).setAudioOutput = Native.cm_setAudioOutput;
+(NativeCallManager.prototype as any).setAudioOutputById =
+  Native.cm_setAudioOutputById;
 (NativeCallManager.prototype as any).setVoiceProcessingEnabled =
   Native.cm_setVoiceProcessingEnabled;
 (NativeCallManager.prototype as any).processEvents = Native.cm_processEvents;
@@ -307,7 +309,7 @@ function rawPeekInfoToPeekInfo(raw: RawPeekInfo): PeekInfo {
 class Requests<T> {
   private readonly _resolveById = new Map<
     number,
-    [(response: T) => void, () => void]
+    [(response: T) => void, (error: Error) => void]
   >();
   private _nextId = 1;
 
@@ -329,14 +331,29 @@ class Requests<T> {
     return true;
   }
 
-  reject(id: number) {
+  reject(id: number, error: Error) {
     const callbacks = this._resolveById.get(id);
     if (!callbacks) {
       return false;
     }
-    callbacks[1]();
+    callbacks[1](error);
     this._resolveById.delete(id);
     return true;
+  }
+}
+
+export class AudioDeviceInitError extends Error {
+  readonly #audioDevice: AudioDevice | undefined;
+
+  constructor(device?: AudioDevice) {
+    super(
+      `AudioDeviceInitError: ${JSON.stringify(cleanAudioDeviceForLogging(device))}`
+    );
+    this.#audioDevice = device;
+  }
+
+  get audioDevice(): AudioDevice | undefined {
+    return this.#audioDevice;
   }
 }
 
@@ -369,6 +386,7 @@ export class RingRTCType {
   private readonly _peekRequests: Requests<HttpResult<PeekInfo>>;
   private readonly _callLinkRequests: Requests<HttpResult<CallLinkState>>;
   private readonly _emptyRequests: Requests<HttpResult<undefined>>;
+  private readonly _audioDeviceRequests: Requests<AudioDevice | undefined>;
 
   // A map to hold call information not maintained in RingRTC.
   private readonly _callInfoByCallId: Map<string, CallInfo>;
@@ -387,11 +405,19 @@ export class RingRTCType {
   handleStartCall: ((call: Call) => Promise<boolean>) | null = null;
 
   handleOutputDeviceChanged:
-    | ((devices: Array<AudioDevice>) => Promise<void>)
+    | ((devices: AudioDeviceList) => Promise<void>)
     | null = null;
 
   handleInputDeviceChanged:
-    | ((devices: Array<AudioDevice>) => Promise<void>)
+    | ((devices: AudioDeviceList) => Promise<void>)
+    | null = null;
+
+  handleSettleStartPlayback:
+    | ((success: boolean, device: AudioDevice | undefined) => Promise<void>)
+    | null = null;
+
+  handleSettleStartRecording:
+    | ((success: boolean, device: AudioDevice | undefined) => Promise<void>)
     | null = null;
 
   handleRejectedIncomingCallRequest:
@@ -472,6 +498,7 @@ export class RingRTCType {
     this._peekRequests = new Requests();
     this._callLinkRequests = new Requests();
     this._emptyRequests = new Requests();
+    this._audioDeviceRequests = new Requests();
     this._callInfoByCallId = new Map();
   }
 
@@ -1290,10 +1317,35 @@ export class RingRTCType {
   }
 
   // Called by UX
-  setMicrophoneWarmupEnabled(warmup: boolean): void {
+  // Note: the promise here will resolve right away for a "stop" request; it's
+  // only useful to detect start failures.
+  setMicrophoneWarmupEnabled(
+    warmup: boolean
+  ): Promise<AudioDevice | undefined> {
+    if (warmup) {
+      const [requestId, promise] = this._audioDeviceRequests.add();
+      sillyDeadlockProtection(() => {
+        try {
+          this.callManager.setMicrophoneWarmupEnabled(warmup, requestId);
+        } catch (e) {
+          this._audioDeviceRequests.reject(
+            requestId,
+            e instanceof Error ? e : new Error(String(e))
+          );
+        }
+      });
+      return promise;
+    }
     sillyDeadlockProtection(() => {
-      this.callManager.setMicrophoneWarmupEnabled(warmup);
+      try {
+        this.callManager.setMicrophoneWarmupEnabled(warmup, 0);
+      } catch (e) {
+        this.logWarn(`Failed to stop microphone warmup: ${e}`);
+      }
     });
+    // In general we don't plumb through "stop recording" results because there's
+    // nothing that the client can do with a failure there. Just resolve this right away.
+    return Promise.resolve(undefined);
   }
 
   // Called by UX
@@ -1623,7 +1675,7 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  onOutputDeviceChanged(devices: Array<AudioDevice>): void {
+  onOutputDeviceChanged(devices: AudioDeviceList): void {
     (async () => {
       if (this.handleOutputDeviceChanged) {
         await this.handleOutputDeviceChanged(devices);
@@ -1632,10 +1684,56 @@ export class RingRTCType {
   }
 
   // Called by Rust
-  onInputDeviceChanged(devices: Array<AudioDevice>): void {
+  onInputDeviceChanged(devices: AudioDeviceList): void {
     (async () => {
       if (this.handleInputDeviceChanged) {
         await this.handleInputDeviceChanged(devices);
+      }
+    })().catch(e => this.logError(e.toString()));
+  }
+
+  // Called by Rust
+  onSettleStartPlayback(
+    success: boolean,
+    device: AudioDevice | undefined
+  ): void {
+    (async () => {
+      if (this.handleSettleStartPlayback) {
+        await this.handleSettleStartPlayback(success, device);
+      }
+    })().catch(e => this.logError(e.toString()));
+  }
+
+  // Resolve an audio-device-related promise. Called by rust
+  onSettleAudioPromise(
+    success: boolean,
+    device: AudioDevice | undefined,
+    requestId: number
+  ): void {
+    if (success) {
+      if (!this._audioDeviceRequests.resolve(requestId, device)) {
+        this.logWarn(
+          `Invalid request ID for onSettleAudioPromise: ${requestId}`
+        );
+      }
+    } else if (
+      !this._audioDeviceRequests.reject(
+        requestId,
+        new AudioDeviceInitError(device)
+      )
+    ) {
+      this.logWarn(`Invalid request ID for onSettleAudioPromise: ${requestId}`);
+    }
+  }
+
+  // Called by Rust
+  onSettleStartRecording(
+    success: boolean,
+    device: AudioDevice | undefined
+  ): void {
+    (async () => {
+      if (this.handleSettleStartRecording) {
+        await this.handleSettleStartRecording(success, device);
       }
     })().catch(e => this.logError(e.toString()));
   }
@@ -1946,20 +2044,50 @@ export class RingRTCType {
     call.hangup();
   }
 
-  getAudioInputs(): Array<AudioDevice> {
+  // As of mid-2026, we would not expect undefined returns here to be retriable:
+  // They would indicate a poisoned mutex or that we had altogether failed to
+  // initialize the ADM.
+  // It is possible that will change in the future.
+  getAudioInputs(): AudioDeviceList | undefined {
     return this.callManager.getAudioInputs();
   }
 
-  setAudioInput(index: number): void {
-    this.callManager.setAudioInput(index);
+  setAudioInputById(id: string): Promise<AudioDevice | undefined> {
+    const [requestId, promise] = this._audioDeviceRequests.add();
+    sillyDeadlockProtection(() => {
+      try {
+        this.callManager.setAudioInputById(id, requestId);
+      } catch (e) {
+        this._audioDeviceRequests.reject(
+          requestId,
+          e instanceof Error ? e : new Error(String(e))
+        );
+      }
+    });
+    return promise;
   }
 
-  getAudioOutputs(): Array<AudioDevice> {
+  // As of mid-2026, we would not expect undefined returns here to be retriable:
+  // They would indicate a poisoned mutex or that we had altogether failed to
+  // initialize the ADM.
+  // It is possible that will change in the future.
+  getAudioOutputs(): AudioDeviceList | undefined {
     return this.callManager.getAudioOutputs();
   }
 
-  setAudioOutput(index: number): void {
-    this.callManager.setAudioOutput(index);
+  setAudioOutputById(id: string): Promise<AudioDevice | undefined> {
+    const [requestId, promise] = this._audioDeviceRequests.add();
+    sillyDeadlockProtection(() => {
+      try {
+        this.callManager.setAudioOutputById(id, requestId);
+      } catch (e) {
+        this._audioDeviceRequests.reject(
+          requestId,
+          e instanceof Error ? e : new Error(String(e))
+        );
+      }
+    });
+    return promise;
   }
 
   /**
@@ -1972,8 +2100,21 @@ export class RingRTCType {
    *
    * @param enabled - whether to enable voice processing
    */
-  setVoiceProcessingEnabled(enabled: boolean): void {
-    this.callManager.setVoiceProcessingEnabled(enabled);
+  setVoiceProcessingEnabled(
+    enabled: boolean
+  ): Promise<AudioDevice | undefined> {
+    const [requestId, promise] = this._audioDeviceRequests.add();
+    sillyDeadlockProtection(() => {
+      try {
+        this.callManager.setVoiceProcessingEnabled(enabled, requestId);
+      } catch (e) {
+        this._audioDeviceRequests.reject(
+          requestId,
+          e instanceof Error ? e : new Error(String(e))
+        );
+      }
+    });
+    return promise;
   }
 }
 
@@ -2009,12 +2150,33 @@ type IceServer = {
 export type AudioDevice = {
   // Device name.
   name: string;
-  // Index of this device, starting from 0.
-  index: number;
   // A unique and somewhat stable identifier of this device.
   uniqueId: string;
-  // If present, the identifier of a localized string to substitute for the device name.
-  i18nKey?: string;
+};
+
+// See https://learn.microsoft.com/en-us/windows/win32/coreaudio/device-roles
+export type WindowsDefaultAudioDevices = {
+  isWindows: true;
+  // E.g. for VoIP. historically labeled "communications"
+  communicationsDevice: AudioDevice | undefined;
+  // E.g. for games, system notifications. historically labeled "default"
+  consoleDevice: AudioDevice | undefined;
+};
+
+export type NonWindowsDefaultAudioDevice = {
+  isWindows: false;
+  device: AudioDevice | undefined;
+};
+
+// Describes a group of input or output devices, along with OS-specified defaults.
+export type AudioDeviceList = {
+  devices: Array<AudioDevice>;
+  // Note: The devices in this list will typically, but not always, appear in
+  // the |devices| list.
+  // For example, on linux (which uses pulseaudio), we do not list "monitor" inputs
+  // in the |devices| list, because users typically do not want to use them for video calls.
+  // However, if the user's system default is a monitor input, we do report it here.
+  defaults: WindowsDefaultAudioDevices | NonWindowsDefaultAudioDevice;
 };
 
 // Given a weird name to not conflict with WebCodec's VideoPixelFormat
@@ -2022,6 +2184,66 @@ export enum VideoPixelFormatEnum {
   I420 = 0,
   Nv12 = 1,
   Rgba = 2,
+}
+
+export function truncateForLogging(name: string | undefined): string {
+  if (!name) {
+    return 'undefined';
+  }
+  if (name.length <= 4) {
+    return name;
+  }
+  return `${name.slice(0, 2)}...${name.slice(-2)}`;
+}
+
+export function cleanAudioDeviceForLogging(device: AudioDevice): AudioDevice;
+export function cleanAudioDeviceForLogging(
+  device: AudioDevice | undefined
+): AudioDevice | undefined;
+export function cleanAudioDeviceForLogging(
+  device: AudioDevice | undefined
+): AudioDevice | undefined {
+  if (device === undefined) {
+    return device;
+  }
+  return {
+    name: truncateForLogging(device.name),
+    uniqueId: truncateForLogging(device.uniqueId),
+  };
+}
+
+export function cleanAudioDeviceListForLogging(
+  deviceList: AudioDeviceList
+): AudioDeviceList {
+  const devices = [];
+
+  for (const device of deviceList.devices) {
+    devices.push(cleanAudioDeviceForLogging(device));
+  }
+
+  let defaults: NonWindowsDefaultAudioDevice | WindowsDefaultAudioDevices;
+
+  if (deviceList.defaults.isWindows) {
+    defaults = {
+      isWindows: true,
+      communicationsDevice: cleanAudioDeviceForLogging(
+        deviceList.defaults.communicationsDevice
+      ),
+      consoleDevice: cleanAudioDeviceForLogging(
+        deviceList.defaults.consoleDevice
+      ),
+    };
+  } else {
+    defaults = {
+      isWindows: false,
+      device: cleanAudioDeviceForLogging(deviceList.defaults.device),
+    };
+  }
+
+  return {
+    devices,
+    defaults,
+  };
 }
 
 export function videoPixelFormatToEnum(
@@ -2200,7 +2422,7 @@ export class Call {
       sillyDeadlockProtection(() => {
         this._callManager.setOutgoingAudioEnabled(false);
         this._callManager.setOutgoingVideoEnabled(false);
-        this._callManager.setMicrophoneWarmupEnabled(false);
+        this._callManager.setMicrophoneWarmupEnabled(false, 0);
       });
       this._outgoingAudioEnabled = false;
       this._outgoingVideoEnabled = false;
@@ -3015,7 +3237,7 @@ export type CallManager = {
   signalingMessageSent(callId: CallId): void;
   signalingMessageSendFailed(callId: CallId): void;
   setOutgoingAudioEnabled(enabled: boolean): void;
-  setMicrophoneWarmupEnabled(enabled: boolean): void;
+  setMicrophoneWarmupEnabled(enabled: boolean, requestId: number): void;
   setOutgoingVideoEnabled(enabled: boolean): void;
   setOutgoingVideoIsScreenShare(enabled: boolean): void;
   updateDataMode(dataMode: DataMode): void;
@@ -3211,11 +3433,11 @@ export type CallManager = {
     linkRootKey: Uint8Array<ArrayBuffer>
   ): void;
 
-  getAudioInputs(): Array<AudioDevice>;
-  setAudioInput(index: number): void;
-  getAudioOutputs(): Array<AudioDevice>;
-  setAudioOutput(index: number): void;
-  setVoiceProcessingEnabled(enabled: boolean): void;
+  getAudioInputs(): AudioDeviceList | undefined;
+  setAudioInputById(id: string, requestId: number): void;
+  getAudioOutputs(): AudioDeviceList | undefined;
+  setAudioOutputById(id: string, requestId: number): void;
+  setVoiceProcessingEnabled(enabled: boolean, requestId: number): void;
 };
 
 export type CallManagerCallbacks = {
