@@ -13,7 +13,7 @@ use log::*;
 
 use crate::{
     common::Result,
-    webrtc::peer_connection_factory::{AudioDeviceList, PeerConnectionFactory},
+    webrtc::peer_connection_factory::{AudioDeviceList, DefaultAudioDevice, PeerConnectionFactory},
 };
 
 // We may need to try a few times to get audio devices; they're not necessarily
@@ -24,13 +24,26 @@ use crate::{
 // Only try for up to AUDIO_DEVICE_TIMEOUT before giving up.
 const AUDIO_DEVICE_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Does the specified device list contain **any** devices?
+fn has_any_devices(device_list: &AudioDeviceList) -> bool {
+    if !device_list.list.is_empty() {
+        return true;
+    }
+    match &device_list.default {
+        DefaultAudioDevice::Windows(defaults) => {
+            defaults.communications_device.is_some() || defaults.console_device.is_some()
+        }
+        DefaultAudioDevice::NonWindows(default) => default.is_some(),
+    }
+}
+
 fn wait_for_playout_devices(
     peer_connection_factory: &mut PeerConnectionFactory,
 ) -> Result<AudioDeviceList> {
     let start = Instant::now();
     while start.elapsed() < AUDIO_DEVICE_TIMEOUT {
         if let Ok(device_list) = peer_connection_factory.get_audio_playout_devices()
-            && !device_list.list.is_empty()
+            && has_any_devices(&device_list)
         {
             return Ok(device_list);
         }
@@ -45,7 +58,7 @@ fn wait_for_recording_devices(
     let start = Instant::now();
     while start.elapsed() < AUDIO_DEVICE_TIMEOUT {
         if let Ok(device_list) = peer_connection_factory.get_audio_recording_devices()
-            && !device_list.list.is_empty()
+            && has_any_devices(&device_list)
         {
             return Ok(device_list);
         }
