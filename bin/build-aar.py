@@ -162,6 +162,7 @@ def BuildArch(webrtc_src_dir, build_dir, arch, debug,
             'android_static_analysis': '"off"',
             'use_siso': 'true',
             'rtc_opus_support_dred': 'true',
+            'rtc_video_psnr': 'false',
             'use_debug_fission': 'false'
         }
         if debug is True:

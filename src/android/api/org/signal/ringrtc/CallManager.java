@@ -111,7 +111,8 @@ public class CallManager {
 
       Map<String, String> fieldTrialsWithDefaults = new HashMap<>();
       fieldTrialsWithDefaults.put("RingRTC-PruneTurnPorts", "Enabled");
-      fieldTrialsWithDefaults.put("WebRTC-Bwe-ProbingConfiguration", "skip_if_est_larger_than_fraction_of_max:0.99");
+      fieldTrialsWithDefaults.put("WebRTC-Audio-NetEqSmartFlushing", "enabled:false");
+      fieldTrialsWithDefaults.put("WebRTC-Bwe-ProbingConfiguration", "skip_if_est_larger_than_fraction_of_max:0.99,probe_max_allocation_without_alr:false");
       fieldTrialsWithDefaults.put("WebRTC-IncreaseIceCandidatePriorityHostSrflx", "Enabled");
       fieldTrialsWithDefaults.putAll(fieldTrials);
 

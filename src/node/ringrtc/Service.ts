@@ -40,8 +40,9 @@ class NativeCallManager {
     const fieldTrials = {
       'RingRTC-AnyAddressPortsKillSwitch': 'Enabled',
       'RingRTC-PruneTurnPorts': 'Enabled',
+      'WebRTC-Audio-NetEqSmartFlushing': 'enabled:false',
       'WebRTC-Bwe-ProbingConfiguration':
-        'skip_if_est_larger_than_fraction_of_max:0.99',
+        'skip_if_est_larger_than_fraction_of_max:0.99,probe_max_allocation_without_alr:false',
       'WebRTC-IncreaseIceCandidatePriorityHostSrflx': 'Enabled',
       ...config.field_trials,
     };

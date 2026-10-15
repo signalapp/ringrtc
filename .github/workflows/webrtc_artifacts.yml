@@ -230,8 +230,8 @@ jobs:
     - name: Install Windows SDK
       uses: ChristopheLav/windows-sdk-install@v1
       with:
-        version-sdk: 26100
-        features: 'OptionId.WindowsDesktopDebuggers'
+        version-sdk: 28000
+        features: 'OptionId.UWPCPP,OptionId.DesktopCPPx64,OptionId.DesktopCPParm64,OptionId.WindowsDesktopDebuggers'
 
     - name: Setup Git Cookies
       uses: ./.github/actions/setup-gitcookies
