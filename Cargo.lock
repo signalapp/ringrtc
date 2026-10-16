@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "call_sim"
-version = "2.72.1"
+version = "2.73.0"
 dependencies = [
  "anyhow",
  "base64 0.23.0",
@@ -440,7 +440,7 @@ dependencies = [
  "log",
  "plotters",
  "prost",
- "protobuf 2.72.1",
+ "protobuf 2.73.0",
  "regex",
  "relative-path",
  "serde",
@@ -2372,7 +2372,7 @@ dependencies = [
 
 [[package]]
 name = "mrp"
-version = "2.72.1"
+version = "2.73.0"
 dependencies = [
  "anyhow",
  "log",
@@ -2852,7 +2852,7 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.72.1"
+version = "2.73.0"
 dependencies = [
  "prost-build",
  "tonic-prost-build",
@@ -3232,7 +3232,7 @@ dependencies = [
 
 [[package]]
 name = "ringrtc"
-version = "2.72.1"
+version = "2.73.0"
 dependencies = [
  "aes 0.9.2",
  "aes-gcm-siv",
@@ -3260,7 +3260,7 @@ dependencies = [
  "neon",
  "num_enum",
  "prost",
- "protobuf 2.72.1",
+ "protobuf 2.73.0",
  "rand 0.10.2",
  "regex-aot",
  "regex-automata",
@@ -4461,7 +4461,7 @@ dependencies = [
 
 [[package]]
 name = "webrtc-sys"
-version = "2.72.1"
+version = "2.73.0"
 dependencies = [
  "anyhow",
  "webrtc-sys-build",

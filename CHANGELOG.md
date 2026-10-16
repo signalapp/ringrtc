@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.73.0
+
+- Update to webrtc 8037a (m154)
+
+- ADM: Device preference improvements
+
+- Desktop: Remove the now unnecessary silly deadlock detection
+
+- Revert "Bound Linux virtual audio sink latency without rewinds"
+
 ## v2.72.1
 
 - Update to webrtc 7871n
