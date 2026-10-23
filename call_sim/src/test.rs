@@ -495,6 +495,7 @@ impl Test {
                                     emulate_network_start(
                                         &client.name,
                                         &timed_network_config.network_config,
+                                        test_case_config.stun_bypass,
                                     )
                                     .await?;
                                 }
@@ -552,6 +553,7 @@ impl Test {
                                 {
                                     // Changing the network emulation takes time, so do it concurrently.
                                     let network_config = timed_network_config.network_config;
+                                    let stun_bypass = test_case_config.stun_bypass;
                                     // For now we will be ignoring errors when changing the emulation settings.
 
                                     let client_names = client_names.clone();
@@ -578,6 +580,7 @@ impl Test {
                                                             emulate_network_start(
                                                                 &name,
                                                                 &network_config,
+                                                                stun_bypass,
                                                             )
                                                             .await?;
                                                         }

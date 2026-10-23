@@ -580,7 +580,11 @@ fn append_netem_options(network_config: &NetworkConfig, args: &mut Vec<String>) 
 }
 
 /// Setup and start network emulation for a given client.
-pub async fn emulate_network_start(name: &str, network_config: &NetworkConfig) -> Result<()> {
+pub async fn emulate_network_start(
+    name: &str,
+    network_config: &NetworkConfig,
+    stun_bypass: bool,
+) -> Result<()> {
     // Add a qdisc to the root of interface eth0. The source of the commands used in this
     // function are from `tcconfig ... --tc-command`, which dumps the `tc` commands used
     // to achieve the result. They use 'htb' not 'tbf', so we'll go with it.
@@ -744,6 +748,43 @@ pub async fn emulate_network_start(name: &str, network_config: &NetworkConfig) -
         .spawn()?
         .wait()
         .await?;
+
+    // STUN, matched by the magic cookie that follows the UDP header (assumes no IP options).
+    if stun_bypass {
+        let _ = Command::new("docker")
+            .args([
+                "exec",
+                name,
+                "tc",
+                "filter",
+                "add",
+                "dev",
+                "eth0",
+                "parent",
+                "1a1a:",
+                "prio",
+                "4",
+                "protocol",
+                "ip",
+                "u32",
+                "match",
+                "ip",
+                "protocol",
+                "17",
+                "0xff",
+                "match",
+                "u32",
+                "0x2112a442",
+                "0xffffffff",
+                "at",
+                "32",
+                "flowid",
+                "1a1a:1",
+            ])
+            .spawn()?
+            .wait()
+            .await?;
+    }
 
     // Finally, open up the filter for anything else to be emulated and associate the flowid
     // to the class id `1a1a:88`.

@@ -257,6 +257,8 @@ pub struct TestCaseConfig {
     pub analysis_concurrency: u16,
     /// Whether or not this test case should be a group call
     pub is_group_call: bool,
+    /// If true, STUN packets bypass the network emulation, keeping ICE writable during stalls.
+    pub stun_bypass: bool,
 }
 
 impl TestCaseConfig {
@@ -298,6 +300,7 @@ impl Default for TestCaseConfig {
             save_media_files: true,
             analysis_concurrency: 16,
             is_group_call: false,
+            stun_bypass: false,
         }
     }
 }
@@ -615,6 +618,19 @@ pub struct NetworkConfigWithOffset {
     pub network_config: NetworkConfig,
 }
 
+impl NetworkConfigWithOffset {
+    pub fn loss_and_rate(offset_secs: u64, loss: Option<Loss>, rate: u32) -> Self {
+        Self {
+            offset: Duration::from_secs(offset_secs),
+            network_config: NetworkConfig {
+                loss,
+                rate,
+                ..Default::default()
+            },
+        }
+    }
+}
+
 /// General structure for network emulation settings.
 /// (see https://manpages.ubuntu.com/manpages/jammy/man8/tc-netem.8.html)
 #[derive(Copy, Clone, Default, Debug)]
@@ -870,13 +886,11 @@ impl NetworkProfile {
                         )),
                         loss: Some(Loss::GeModel(GeLossModel::SimpleGilbert { p: 3, r: 25 })),
                         duplication: 2,
-                        corruption: 0,
                         reorder: 5,
                         reorder_correlation: 50,
-                        reorder_gap: 0,
                         rate: 300,
                         limit: 30,
-                        slot: 0,
+                        ..Default::default()
                     },
                 }]
             }

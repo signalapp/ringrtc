@@ -21,8 +21,9 @@ use log::info;
 use crate::{
     common::{
         AudioAnalysisMode, AudioConfig, BurstLength, CallConfig, CallProfile::DeterministicLoss,
-        ChartDimension, GroupConfig, NetworkConfig, NetworkConfigWithOffset, NetworkProfile,
-        RelayServerConfig, SummaryReportColumns, TestCaseConfig, VideoConfig,
+        ChartDimension, DelayVariationStrategy, Distribution, GeLossModel, GroupConfig, Loss,
+        NetworkConfig, NetworkConfigWithOffset, NetworkProfile, RelayServerConfig,
+        SummaryReportColumns, TestCaseConfig, VideoConfig,
     },
     config::DynamicClientProfileFactory,
     docker::{build_images, clean_network},
@@ -1186,6 +1187,156 @@ async fn run_dred_tests(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
+/// Smart flushing with and without DRED, over stall-and-burst queueing, bursty loss and a deep
+/// jitter buffer. STUN bypasses the emulation so that ICE stays writable during the stalls.
+async fn run_dred_flush_tests(test: &mut Test) -> Result<()> {
+    let configs = [
+        (0, "off", None),
+        (
+            0,
+            "smart_default",
+            Some("WebRTC-Audio-NetEqSmartFlushing/enabled:true"),
+        ),
+        (100, "off", None),
+        (
+            100,
+            "smart",
+            Some(
+                "WebRTC-Audio-NetEqSmartFlushing/enabled:true,target_level_threshold_ms:600,target_level_multiplier:2",
+            ),
+        ),
+        (
+            100,
+            "smart_default",
+            Some("WebRTC-Audio-NetEqSmartFlushing/enabled:true"),
+        ),
+    ];
+
+    let test_cases = configs.map(|(dred_duration, smart_flushing, field_trial)| {
+        let field_trials: Vec<String> = field_trial.iter().map(|t| t.to_string()).collect();
+        TestCaseConfig {
+            test_case_name: format!(
+                "dred_duration_{dred_duration}-smart_flushing_{smart_flushing}"
+            ),
+            length_seconds: 120,
+            client_configs: vec![
+                CallConfig {
+                    audio: AudioConfig {
+                        input_name: "normal_12s".to_string(),
+                        generate_spectrogram: false,
+                        visqol_speech_analysis: false,
+                        dred_duration,
+                        // Force DRED to be encoded with the expected loss rate.
+                        min_packet_loss_percent: if dred_duration > 0 { 20 } else { 0 },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+                .with_field_trials(&field_trials),
+                CallConfig {
+                    audio: AudioConfig {
+                        input_name: "normal_12s".to_string(),
+                        analysis_mode: AudioAnalysisMode::Chopped,
+                        generate_spectrogram: false,
+                        visqol_speech_analysis: true,
+                        visqol_audio_analysis: true,
+                        pesq_speech_analysis: true,
+                        plc_speech_analysis: true,
+                        dred_duration,
+                        // Force DRED to be encoded with the expected loss rate.
+                        min_packet_loss_percent: if dred_duration > 0 { 20 } else { 0 },
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+                .with_field_trials(&field_trials),
+            ],
+            iterations: 3,
+            stun_bypass: true,
+            ..Default::default()
+        }
+    });
+
+    let loss = Some(Loss::GeModel(GeLossModel::SimpleGilbert { p: 3, r: 12 }));
+
+    test.run(
+        GroupConfig {
+            group_name: "dred_flush_tests".to_string(),
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_speech: true,
+                show_visqol_mos_audio: true,
+                show_pesq_mos: true,
+                show_plc_mos: true,
+                show_video: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        test_cases.into(),
+        vec![
+            // 5 s stalls at 1 kbps (0 is unlimited) released at 240 kbps, one per 12 s segment from
+            // segment 1 to 8. Segment 0 is clean (the control) and the call ends with a recovery.
+            NetworkProfile::Custom(
+                "stall_5s_x8".to_string(),
+                vec![
+                    NetworkConfigWithOffset::loss_and_rate(0, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(14, None, 1),
+                    NetworkConfigWithOffset::loss_and_rate(19, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(26, None, 1),
+                    NetworkConfigWithOffset::loss_and_rate(31, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(38, None, 1),
+                    NetworkConfigWithOffset::loss_and_rate(43, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(50, None, 1),
+                    NetworkConfigWithOffset::loss_and_rate(55, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(62, None, 1),
+                    NetworkConfigWithOffset::loss_and_rate(67, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(74, None, 1),
+                    NetworkConfigWithOffset::loss_and_rate(79, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(86, None, 1),
+                    NetworkConfigWithOffset::loss_and_rate(91, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(98, None, 1),
+                    NetworkConfigWithOffset::loss_and_rate(103, None, 240),
+                ],
+            ),
+            // 20% Gilbert loss with 8 s (full flush) and 2 s (mid level) stalls at 4 kbps, each in
+            // its own 12 s segment. 4 kbps keeps HTB's token debt, and so the release lag, small.
+            NetworkProfile::Custom(
+                "loss_20_stall_8s_2s_x2".to_string(),
+                vec![
+                    NetworkConfigWithOffset::loss_and_rate(0, loss, 240),
+                    NetworkConfigWithOffset::loss_and_rate(26, loss, 4),
+                    NetworkConfigWithOffset::loss_and_rate(34, loss, 240),
+                    NetworkConfigWithOffset::loss_and_rate(50, loss, 4),
+                    NetworkConfigWithOffset::loss_and_rate(52, loss, 240),
+                    NetworkConfigWithOffset::loss_and_rate(74, loss, 4),
+                    NetworkConfigWithOffset::loss_and_rate(82, loss, 240),
+                    NetworkConfigWithOffset::loss_and_rate(98, loss, 4),
+                    NetworkConfigWithOffset::loss_and_rate(100, loss, 240),
+                ],
+            ),
+            // Jitter holds a deep buffer, and 25% loss in ~1 s bursts gives large DRED recoveries.
+            NetworkProfile::Custom(
+                "jitter_150_loss_25_burst_1s".to_string(),
+                vec![NetworkConfigWithOffset {
+                    offset: Duration::from_secs(0),
+                    network_config: NetworkConfig {
+                        delay: 200,
+                        delay_variability: 150,
+                        delay_variation_strategy: Some(DelayVariationStrategy::Distribution(
+                            Distribution::Normal,
+                        )),
+                        loss: Some(Loss::GeModel(GeLossModel::SimpleGilbert { p: 2, r: 6 })),
+                        ..Default::default()
+                    },
+                }],
+            ),
+        ],
+    )
+    .await?;
+
+    Ok(())
+}
+
 async fn run_tcc_tests(test: &mut Test) -> Result<()> {
     let tcc_values = [false, true];
     let adaptation_values = 0..=1;
@@ -1373,6 +1524,7 @@ async fn main() -> Result<()> {
             "profiling_suite" => run_perf_test(test).await?,
             "plc_tests" => run_plc_tests(test).await?,
             "dred_tests" => run_dred_tests(test).await?,
+            "dred_flush_tests" => run_dred_flush_tests(test).await?,
             "tcc_tests" => run_tcc_tests(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
         }
