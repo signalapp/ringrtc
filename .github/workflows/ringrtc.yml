@@ -117,7 +117,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest-4-cores, windows-latest-8-cores, macos-latest, ubuntu-24.04-arm64-4-cores]
+        # Linux is pinned to 24.04 because the pipewire-upstream PPA has no 26.04 packages yet.
+        os: [ubuntu-24.04-4-cores, windows-latest-8-cores, macos-latest, ubuntu-24.04-arm64-4-cores]
     runs-on: ${{ matrix.os }}
     outputs:
       macos_size_bytes: ${{ steps.get_size.outputs.darwin_libringrtc-arm64_size }}

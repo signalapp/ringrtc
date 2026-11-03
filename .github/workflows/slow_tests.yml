@@ -78,7 +78,8 @@ jobs:
       # Needed for google-github-actions/auth.
       id-token: 'write'
       contents: read
-    runs-on: ubuntu-latest-4-cores
+    # Pinned to 24.04 because the pipewire-upstream PPA has no 26.04 packages yet.
+    runs-on: ubuntu-24.04-4-cores
     needs: [check-up-to-date]
     if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || github.event_name != 'schedule') }}
     steps:
