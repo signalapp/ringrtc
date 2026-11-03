@@ -320,14 +320,14 @@ impl Display for AudioReceiverStatsSnapshot {
             "{},\
             {ssrc},\
             {packets_per_second:.1},\
-            {packets_lost_pct:.2}%,\
+            {packets_lost_pct:.1}%,\
             {bitrate:.1}bps,\
             {jitter:.0}ms,\
             {audio_energy:.3},\
             {jitter_buffer_delay:.0}ms,\
             {jitter_buffer_target_delay:.0}ms,\
             {jitter_buffer_flushes},\
-            {concealed_samples_pct:.2}%,\
+            {concealed_samples_pct:.1}%,\
             {fec_packets_received},\
             {relative_arrival_delay_per_packet:.0}ms",
             Self::LOG_MARKER
@@ -586,7 +586,7 @@ impl VideoSenderStatsSnapshot {
                 .unwrap_or(0.0);
         let send_delay_per_packet = 1000.0
             * total_packets_send_delay_delta
-                .naive_checked_div(frames_encoded_delta as f64)
+                .naive_checked_div(packets_sent_delta as f64)
                 .unwrap_or(0.0);
         let remote_packets_lost_pct = curr_stats.remote_fraction_lost * 100.0;
         let remote_jitter = 1000.0 * curr_stats.remote_jitter;
@@ -717,7 +717,7 @@ impl VideoReceiverStatsSnapshot {
         let key_frames_decoded_delta = delta!(curr_stats, prev_stats, key_frames_decoded);
         let bytes_received_delta = delta!(curr_stats, prev_stats, bytes_received);
         let total_decode_time_delta = delta!(curr_stats, prev_stats, total_decode_time);
-        let jitter = delta!(curr_stats, prev_stats, jitter);
+        let jitter = 1000.0 * curr_stats.jitter;
         let freeze_count = delta!(curr_stats, prev_stats, freeze_count);
 
         let packets_per_second =
@@ -1062,7 +1062,7 @@ impl StatsObserver {
             );
             info!("{video_sender_stats_snapshot}");
             stats_snapshot_consumer.on_stats_snapshot_ready(&video_sender_stats_snapshot.into());
-            *prev_video_send_stats = video_sender.clone();
+            *prev_video_send_stats = video_sender.clone_without_ptr();
         }
 
         // Audio receivers
@@ -1104,7 +1104,7 @@ impl StatsObserver {
             info!("{video_receiver_stats_snapshot}");
             stats_snapshot_consumer.on_stats_snapshot_ready(&video_receiver_stats_snapshot.into());
             *updated_at = Instant::now();
-            *prev_video_recv_stats = video_receiver.clone();
+            *prev_video_recv_stats = video_receiver.clone_without_ptr();
         }
 
         stats_snapshot_consumer.on_stats_snapshot_ready(&StatsSnapshot::End);
@@ -1190,7 +1190,7 @@ pub struct AudioSenderStatistics {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VideoSenderStatistics {
     pub ssrc: u32,
     pub packets_sent: u32,
@@ -1275,6 +1275,13 @@ impl VideoSenderStatistics {
             x => x.to_string().into(),
         }
     }
+
+    fn clone_without_ptr(&self) -> Self {
+        Self {
+            raw_encoder_implementation: webrtc::ptr::Borrowed::null(),
+            ..*self
+        }
+    }
 }
 
 #[repr(C)]
@@ -1300,7 +1307,7 @@ pub struct AudioReceiverStatistics {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VideoReceiverStatistics {
     pub ssrc: u32,
     pub packets_received: u32,
@@ -1349,8 +1356,17 @@ impl Default for VideoReceiverStatistics {
     }
 }
 
+impl VideoReceiverStatistics {
+    fn clone_without_ptr(&self) -> Self {
+        Self {
+            raw_decoder_implementation: webrtc::ptr::Borrowed::null(),
+            ..*self
+        }
+    }
+}
+
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ConnectionStatistics {
     raw_candidate_pair_id: webrtc::ptr::Borrowed<std::os::raw::c_char>,
 
@@ -1392,9 +1408,10 @@ impl ConnectionStatistics {
     }
 
     fn clone_without_ptr(&self) -> Self {
-        let mut c = self.clone();
-        c.raw_candidate_pair_id = webrtc::ptr::Borrowed::null();
-        c
+        Self {
+            raw_candidate_pair_id: webrtc::ptr::Borrowed::null(),
+            ..*self
+        }
     }
 }
 

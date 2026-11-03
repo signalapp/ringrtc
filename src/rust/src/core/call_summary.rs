@@ -1013,7 +1013,6 @@ const MIN_CALL_TIME_IGNORE_RELAY_FRACTION: Duration = Duration::from_secs(30);
 #[derive(Debug, Default)]
 struct DirectCallSummaryInner {
     call_info: CallInfo,
-    relayed: bool,
     ice_candidate_switch_count: u32,
     ice_reconnect_count: u32,
     /// The time when an offer message is sent from the call object. Callers only.
@@ -1062,7 +1061,11 @@ impl DirectCallSummaryInner {
 
         let call_length_ms: u128 =
             (Into::<u64>::into(end_time) - Into::<u64>::into(start_time)).into();
-        let relayed_time_ms = self.relayed_time_this_call.as_millis();
+        let mut relayed_time = self.relayed_time_this_call;
+        if let Some(last) = self.last_relay_start_time {
+            relayed_time += last.elapsed();
+        }
+        let relayed_time_ms = relayed_time.as_millis();
         let relayed = (relayed_time_ms > call_length_ms / MIN_RELAYED_FRACTION)
             || (relayed_time_ms > 0
                 && call_length_ms <= MIN_CALL_TIME_IGNORE_RELAY_FRACTION.as_millis());
@@ -1130,22 +1133,12 @@ impl DirectCallSummaryInner {
                 self.ice_candidate_switch_count += 1;
                 let now = Instant::now();
 
-                let relayed_now = route.local_relayed || route.remote_relayed;
-                if !relayed_now && self.relayed {
-                    // Switching off relay; add time elapsed
-                    if let Some(last) = self.last_relay_start_time {
-                        self.relayed_time_this_call += now.duration_since(last);
-                    } else {
-                        error!("Expected to have a last_relay_start_time but was None");
-                    }
-                }
-                // Update the start time if we're newly switching to relay OR we are on relay
-                // and haven't set it before (e.g., we started the call on relay).
-                if relayed_now && (!self.relayed || self.last_relay_start_time.is_none()) {
-                    self.last_relay_start_time = Some(now);
+                if route.local_relayed || route.remote_relayed {
+                    self.last_relay_start_time.get_or_insert(now);
+                } else if let Some(last) = self.last_relay_start_time.take() {
+                    self.relayed_time_this_call += now.duration_since(last);
                 }
 
-                self.relayed = relayed_now;
                 if !self.call_info.cellular && route.local_adapter_type.is_cellular() {
                     self.call_info.cellular = true;
                 }
@@ -1427,13 +1420,16 @@ impl GroupCallSummaryInner {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::time::{Duration, Instant, SystemTime};
 
     use prost::Message;
     use rand::RngExt;
 
     use crate::{
-        core::call_summary::{MAX_TELEMETRY_ENCODED_SIZE, Sample, StatsSets},
+        common::CallEndReason,
+        core::call_summary::{
+            CallInfo, DirectCallSummaryInner, MAX_TELEMETRY_ENCODED_SIZE, Sample, StatsSets,
+        },
         protobuf,
     };
 
@@ -1669,5 +1665,31 @@ mod test {
         println!(" -- Stats set count: {}", telemetry.stats_sets.len());
 
         assert!(telemetry.encoded_len() < MAX_TELEMETRY_ENCODED_SIZE);
+    }
+
+    #[test]
+    fn test_relayed_until_end_of_call() {
+        let call_length = Duration::from_secs(60);
+        let mut stats_sets = StatsSets::default();
+        stats_sets.establish_current_stats_set();
+        let inner = DirectCallSummaryInner {
+            call_info: CallInfo {
+                start_time: SystemTime::now() - call_length,
+                stats_sets,
+                ..Default::default()
+            },
+            last_relay_start_time: Some(Instant::now() - call_length),
+            ..Default::default()
+        };
+
+        let summary = inner.build_call_summary(None, CallEndReason::LocalHangup);
+        let telemetry = protobuf::call_summary::CallTelemetry::decode(
+            summary.raw_stats.expect("has raw stats").as_slice(),
+        )
+        .expect("decodes");
+        assert_eq!(
+            Some(true),
+            telemetry.direct_call_summary.expect("is direct").relayed
+        );
     }
 }
