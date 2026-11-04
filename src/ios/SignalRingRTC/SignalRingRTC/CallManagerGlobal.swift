@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-import RingRTCFfi
+internal import RingRTCFfi
 import WebRTC
 
 // Global singleton to guarantee certain things are only invoked

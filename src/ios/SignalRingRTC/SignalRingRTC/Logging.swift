@@ -6,7 +6,7 @@
 // FFI that allows RingRTC to make logging requests through
 // a Delegate implemented by the application.
 
-import RingRTCFfi
+internal import RingRTCFfi
 import WebRTC
 
 public enum RingRTCLogLevel: UInt8, Comparable {

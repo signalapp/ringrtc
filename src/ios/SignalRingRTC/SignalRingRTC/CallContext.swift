@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-import RingRTCFfi
+internal import RingRTCFfi
 import WebRTC
 
 // This class's member functions are all called from the CallManager class

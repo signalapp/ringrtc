@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import RingRTCFfi
+internal import RingRTCFfi
 
 /// Type of media for call at time of origination.
 public enum CallMediaType: Int32 {

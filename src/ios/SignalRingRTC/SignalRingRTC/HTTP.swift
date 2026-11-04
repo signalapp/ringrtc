@@ -7,7 +7,7 @@
 // a Delegate implemented by the application.
 
 import Foundation
-import RingRTCFfi
+internal import RingRTCFfi
 
 // Same as rust http::Method.
 public enum HTTPMethod: Int32 {

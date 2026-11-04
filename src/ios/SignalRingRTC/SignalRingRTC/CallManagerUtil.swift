@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import RingRTCFfi
+internal import RingRTCFfi
 
 extension AppByteSlice {
     func asUnsafeBufferPointer() -> UnsafeBufferPointer<UInt8> {

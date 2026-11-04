@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import RingRTCFfi
+internal import RingRTCFfi
 
 public struct CallLinkRootKey: CustomStringConvertible {
     public struct ValidationError: Error {}

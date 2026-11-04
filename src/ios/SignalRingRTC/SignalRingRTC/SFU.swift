@@ -7,7 +7,7 @@
 // to the SFU, such as peeking a group call.
 
 import Foundation
-import RingRTCFfi
+internal import RingRTCFfi
 
 public struct PeekRequest {
     public let sfuURL: String

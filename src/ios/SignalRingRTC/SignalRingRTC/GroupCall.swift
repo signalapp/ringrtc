@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-import RingRTCFfi
+internal import RingRTCFfi
 import WebRTC
 
 // Redeclares the ringrtc.h typedef so apps can use it without importing RingRTCFfi.

@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import RingRTCFfi
+internal import RingRTCFfi
 
 // Here is the new lite/modularized pattern for FFI for a module called X
 // (so far where X is "sfu" or "http")

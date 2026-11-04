@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 
-import RingRTCFfi
+internal import RingRTCFfi
 
 // Called from setUpRingRTCLogging, which apps call before using anything else in RingRTC, so dead
 // stripping can't remove this reference. A mismatched libringrtc causes linking to fail.

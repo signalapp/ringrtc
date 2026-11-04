@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import RingRTCFfi
+internal import RingRTCFfi
 
 /// Overall call quality statistics.
 ///
