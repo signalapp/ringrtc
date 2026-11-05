@@ -3766,3 +3766,109 @@ fn call_fsm_terminates_without_terminate_event() {
 
     assert!(context.wait_for_call_fsm_terminated(&active_call));
 }
+
+// A connection torn down after a failed FSM quiesce must still end up in the
+// Terminated state, rather than staying at Terminating forever.
+#[test]
+fn connection_reaches_terminated_when_fsm_cannot_quiesce() {
+    test_init();
+
+    let context = connected_and_accepted_outbound_call();
+    let mut cm = context.cm();
+    let active_connection = context.active_connection();
+    let peer_connection = active_connection.app_connection().expect(error_line!());
+
+    context.pause_connection_fsm();
+    assert!(context.fill_connection_fsm_queue() > 0);
+
+    cm.hangup();
+    context.wait_for_teardown();
+
+    // Terminate could not be injected, so terminate() skipped the wait and tore
+    // the connection down anyway.
+    assert!(!active_connection.fsm_terminated());
+    assert!(peer_connection.closed());
+    // The Terminated state should still be reached.
+    assert_eq!(
+        active_connection.state().expect(error_line!()),
+        ConnectionState::Terminated
+    );
+
+    // Released, the FSM quiesces out of band, draining the backlog.
+    context.resume_connection_fsm();
+
+    assert!(context.wait_for_connection_fsm_terminated(&active_connection));
+    // Still must be in the Terminated state.
+    assert_eq!(
+        active_connection.state().expect(error_line!()),
+        ConnectionState::Terminated
+    );
+}
+
+// A poisoned webrtc mutex must not stop Connection::terminate from closing the
+// peer connection and releasing its resources.
+#[test]
+fn terminate_closes_peer_connection_with_poisoned_webrtc_mutex() {
+    test_init();
+
+    let context = connected_and_accepted_outbound_call();
+    let mut cm = context.cm();
+    let active_connection = context.active_connection();
+    // Capture this before poisoning; app_connection() takes the same mutex.
+    let peer_connection = active_connection.app_connection().expect(error_line!());
+
+    active_connection.poison_webrtc_lock();
+
+    cm.hangup();
+    context.wait_for_teardown();
+
+    assert!(peer_connection.closed());
+    assert!(!peer_connection.outgoing_audio_enabled());
+    assert!(!peer_connection.rtp_sink_registered());
+}
+
+// A poisoned connection_map mutex must not stop the call from terminating the
+// connections it holds.
+#[test]
+fn terminate_closes_peer_connection_with_poisoned_connection_map() {
+    test_init();
+
+    let context = connected_and_accepted_outbound_call();
+    let mut cm = context.cm();
+    let peer_connection = context
+        .active_connection()
+        .app_connection()
+        .expect(error_line!());
+
+    context.active_call().poison_connection_map();
+
+    cm.hangup();
+    context.wait_for_teardown();
+
+    assert!(peer_connection.closed());
+    assert!(!peer_connection.outgoing_audio_enabled());
+    assert!(!peer_connection.rtp_sink_registered());
+}
+
+// A poisoned forking mutex must not stop the call from reaching the connections
+// in the map, which are terminated after the forking parent.
+#[test]
+fn terminate_closes_peer_connection_with_poisoned_forking() {
+    test_init();
+
+    let context = connected_and_accepted_outbound_call();
+    let mut cm = context.cm();
+    let peer_connection = context
+        .active_connection()
+        .app_connection()
+        .expect(error_line!());
+
+    context.active_call().poison_forking();
+
+    cm.hangup();
+    context.wait_for_teardown();
+
+    assert!(peer_connection.closed());
+    assert!(!peer_connection.outgoing_audio_enabled());
+    assert!(!peer_connection.rtp_sink_registered());
+}

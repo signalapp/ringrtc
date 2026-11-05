@@ -1186,7 +1186,9 @@ where
         };
 
         // blocks while call FSM terminates
-        call.terminate()
+        call.terminate();
+
+        Ok(())
     }
 
     /// Sends a hangup message to a remote_peer via the application.

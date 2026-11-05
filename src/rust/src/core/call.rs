@@ -867,7 +867,7 @@ where
                 // Close this connection and remove it from the map
                 if let Some(mut connection) = connection_map.remove(&remote_device) {
                     info!("ice_failed(): terminating inactive connection");
-                    connection.terminate()?;
+                    connection.terminate();
                 }
             }
         }
@@ -900,15 +900,20 @@ where
     }
 
     /// Terminate Connections for this Call.
-    fn terminate_connections(&mut self) -> Result<()> {
+    fn terminate_connections(&mut self) {
         // For each component that we terminate,
         // we should continue terminating even if that individual component fails.
 
         // close any application specific resources
         if let Ok(call_context) = self.call_context()
-            && let Err(e) = self
-                .call_manager()?
-                .disconnect_incoming_media(&call_context)
+            && let Ok(call_manager) = self.call_manager().inspect_err(|e| {
+                error!(
+                    "terminate_connections(): call_id: {} failed to get the call manager: {}",
+                    self.call_id(),
+                    e
+                )
+            })
+            && let Err(e) = call_manager.disconnect_incoming_media(&call_context)
         {
             error!(
                 "terminate_connections(): call_id: {} failed to disconnect incoming media: {}",
@@ -917,16 +922,10 @@ where
             );
         }
 
-        if let Some(mut forking) = self.forking.lock()?.take()
-            && let Err(e) = forking.parent_connection.terminate()
-        {
-            error!(
-                "terminate_connections(): call_id: {} failed to terminate forking parent connection: {}",
-                self.call_id(),
-                e
-            );
+        if let Some(mut forking) = self.forking.lock_or_ignore_poison().take() {
+            forking.parent_connection.terminate();
         }
-        let mut connection_map = self.connection_map.lock()?;
+        let mut connection_map = self.connection_map.lock_or_ignore_poison();
         for (_, mut connection) in connection_map.drain() {
             info!(
                 "terminate_connections(): call_id: {} remote_device_id: {}",
@@ -934,16 +933,8 @@ where
                 connection.remote_device_id()
             );
             // blocks as connection FSM shutsdown
-            if let Err(e) = connection.terminate() {
-                error!(
-                    "terminate_connections(): call_id: {} remote_device_id: {} failed to terminate connection: {}",
-                    self.call_id(),
-                    connection.remote_device_id(),
-                    e
-                );
-            }
+            connection.terminate();
         }
-        Ok(())
     }
 
     /// Terminate Connections for all devices except the device
@@ -959,9 +950,7 @@ where
         connection_map.retain(|_, connection| {
             if connection.remote_device_id() != accepted_device_id {
                 // blocks as connection FSM shutsdown
-                if let Err(e) = connection.terminate() {
-                    error!("Error when closing {}", e)
-                }
+                connection.terminate();
             }
 
             connection.remote_device_id() == accepted_device_id
@@ -986,7 +975,7 @@ where
     ///
     /// `Note:` The current thread is blocked while waiting for the
     /// FSM to signal that termination is complete.
-    pub fn terminate(&mut self) -> Result<()> {
+    pub fn terminate(&mut self) {
         info!("terminate(): ref_count: {}", self.ref_count());
 
         // Set the state before the terminate_requested flag, so the FSM
@@ -1001,17 +990,17 @@ where
             self.inject_event(CallEvent::Terminate)?;
             self.wait_for_terminate()
         }) {
-            // Log-and-continue so that teardown can continue below.
+            // Log-and-continue so that teardown can continue.
             error!("terminate(): failed to quiesce the FSM: {}", err);
         }
 
-        self.terminate_connections()?;
+        self.terminate_connections();
 
         self.timeout_stopper.stop_all_and_join();
 
-        self.set_state(CallState::Terminated)?;
-
-        Ok(())
+        if let Err(err) = self.set_state(CallState::Terminated) {
+            warn!("terminate(): failed to set Terminated state: {}", err);
+        }
     }
 
     /// Bottom half of `terminate()`
@@ -1297,6 +1286,36 @@ where
     #[cfg(feature = "sim")]
     pub fn fsm_terminated(&self) -> bool {
         *self.terminate_condvar.0.lock().unwrap()
+    }
+
+    /// Poison the connection_map mutex, as a panic holding it would.
+    ///
+    /// `Called By:` Test infrastructure
+    #[cfg(feature = "sim")]
+    pub fn poison_connection_map(&self) {
+        let connection_map = Arc::clone(&self.connection_map);
+        // The guard must still be held when the thread panics, so bind it.
+        let panicked = thread::spawn(move || {
+            let _guard = connection_map.lock();
+            panic!("poisoning the connection_map mutex");
+        })
+        .join();
+        assert!(panicked.is_err(), "the poisoning thread should panic");
+    }
+
+    /// Poison the forking mutex, as a panic holding it would.
+    ///
+    /// `Called By:` Test infrastructure
+    #[cfg(feature = "sim")]
+    pub fn poison_forking(&self) {
+        let forking = Arc::clone(&self.forking);
+        // The guard must still be held when the thread panics, so bind it.
+        let panicked = thread::spawn(move || {
+            let _guard = forking.lock();
+            panic!("poisoning the forking mutex");
+        })
+        .join();
+        assert!(panicked.is_err(), "the poisoning thread should panic");
     }
 
     /// Block the caller until the FSM signals termination, or the timeout

@@ -1726,7 +1726,7 @@ where
     ///
     /// `Note:` The current thread is blocked while waiting for the
     /// FSM to signal that termination is complete.
-    pub fn terminate(&mut self) -> Result<()> {
+    pub fn terminate(&mut self) {
         info!("terminate(): ref_count: {}", self.ref_count());
 
         // Set the state before the terminate_requested flag, so the FSM
@@ -1742,21 +1742,24 @@ where
         // Wait for the FSM to quiesce.
         if let Err(err) = util::try_scoped(|| {
             self.inject_event(ConnectionEvent::Terminate)?;
-            self.wait_for_terminate()?;
-            if let Err(err) = self.set_state(ConnectionState::Terminated) {
-                warn!("terminate(): failed to notify Terminated: {}", err);
-            }
-            Ok(())
+            self.wait_for_terminate()
         }) {
             // Log-and-continue so that teardown can continue below.
             error!("terminate(): failed to quiesce the FSM: {}", err);
+        }
+
+        if let Err(err) = self.set_state(ConnectionState::Terminated) {
+            warn!(
+                "terminate(): failed to set and notify Terminated state: {}",
+                err
+            );
         }
 
         // Stop the timer thread, if any.
         self.tick_context.stopper().stop_all_and_join();
 
         // Free up webrtc related resources.
-        let mut webrtc = self.webrtc.lock()?;
+        let mut webrtc = self.webrtc.lock_or_ignore_poison();
 
         if let Ok(peer_connection) = webrtc.peer_connection() {
             peer_connection.close();
@@ -1792,14 +1795,11 @@ where
         // Box and let it go out of scope.
         match webrtc.connection_ptr.take() {
             Some(v) => {
-                let _ = unsafe { ptr_as_box(v.as_ptr() as *mut Connection<T>)? };
-                Ok(())
+                if let Err(err) = unsafe { ptr_as_box(v.as_ptr() as *mut Connection<T>) } {
+                    warn!("terminate(): failed to free the connection_ptr: {}", err);
+                }
             }
-            None => Err(RingRtcError::OptionValueNotSet(
-                String::from("terminate()"),
-                String::from("connection_ptr"),
-            )
-            .into()),
+            None => warn!("terminate(): connection_ptr was not set"),
         }
     }
 
@@ -2261,6 +2261,21 @@ where
     #[cfg(feature = "sim")]
     pub fn fsm_terminated(&self) -> bool {
         *self.terminate_condvar.0.lock().unwrap()
+    }
+
+    /// Poison the webrtc mutex, as a panic holding it would.
+    ///
+    /// `Called By:` Test infrastructure
+    #[cfg(feature = "sim")]
+    pub fn poison_webrtc_lock(&self) {
+        let webrtc = Arc::clone(&self.webrtc);
+        // The guard must still be held when the thread panics, so bind it.
+        let panicked = thread::spawn(move || {
+            let _guard = webrtc.lock();
+            panic!("poisoning the webrtc mutex");
+        })
+        .join();
+        assert!(panicked.is_err(), "the poisoning thread should panic");
     }
 
     /// Block the caller until the FSM signals termination, or the timeout

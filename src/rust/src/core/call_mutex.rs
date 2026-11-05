@@ -39,6 +39,14 @@ impl<T> CallMutex<T> {
         }
     }
 
+    /// Locks the mutex, ignoring poisoning, and returns the value as the
+    /// panicking thread left it. Only used during teardown.
+    pub fn lock_or_ignore_poison(&self) -> MutexGuard<'_, T> {
+        self.mutex
+            .lock()
+            .unwrap_or_else(|poison_error| poison_error.into_inner())
+    }
+
     pub fn lock_or_reset(&self, reset: impl FnOnce(&str) -> T) -> MutexGuard<'_, T> {
         self.mutex.lock().unwrap_or_else(|mut poison_error| {
             let new_value = reset(&self.label);
