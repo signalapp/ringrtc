@@ -508,8 +508,12 @@ pub struct VideoReceiveStats {
 
 #[derive(Debug, Default)]
 pub struct AudioAdaptation {
-    pub bitrate: Stats,
-    pub packet_length: Stats,
+    pub out_bitrate: Stats,
+    pub out_packet_length: Stats,
+    pub out_loss_floor: Stats,
+    pub in_bandwidth: Stats,
+    pub in_rtt: Stats,
+    pub in_loss: Stats,
 }
 
 #[derive(Debug)]
@@ -531,7 +535,6 @@ impl ClientLogReport {
         HashMap<String, VideoSendStats>,
         HashMap<String, AudioReceiveStats>,
         HashMap<String, VideoReceiveStats>,
-        AudioAdaptation,
     )> {
         // Look through the file and pull out RingRTC logs, particularly the `stats!` details.
         let file = File::open(file_name).await?;
@@ -562,27 +565,11 @@ impl ClientLogReport {
             r".*ringrtc_stats!,video,recv,(?P<ssrc>\d+),(?P<packets_per_second>[-+]?[0-9]*\.?[0-9]+),(?P<packet_loss>[-+]?[0-9]*\.?[0-9]+)%,(?P<bitrate>[0-9]+)bps,(?P<framerate>[0-9]*\.?[0-9]+)fps,(?P<key_frames_decoded>\d+),(?P<decode_time_per_frame>[0-9]*\.?[0-9]+)ms,(?P<resolution>\d+x\d+)",
         )?;
 
-        // Example: ringrtc_adapt!,audio,240,18000,60
-        let re_adaptation_line = Regex::new(
-            r".*ringrtc_adapt!,audio,(?P<time>\d+),(?P<bitrate>\d+),(?P<packet_length>\d+)",
-        )?;
-
         let mut connection_stats = ConnectionStats::default();
         let mut audio_send_stats = AudioSendStats::default();
         let mut video_send_stats_map = HashMap::<String, VideoSendStats>::new();
         let mut audio_receive_stats_map = HashMap::<String, AudioReceiveStats>::new();
         let mut video_receive_stats_map = HashMap::<String, VideoReceiveStats>::new();
-        // Adaptation stats are aperiodic; don't skip any leading data points.
-        let mut audio_adaptation_stats = AudioAdaptation {
-            bitrate: Stats {
-                data: StatsData::new_skip_n(0),
-                ..Default::default()
-            },
-            packet_length: Stats {
-                data: StatsData::new_skip_n(0),
-                ..Default::default()
-            },
-        };
 
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await? {
@@ -795,19 +782,6 @@ impl ClientLogReport {
                 video_receive_stats.resolution.data.push(res as f32);
                 continue;
             }
-
-            if let Some(cap) = re_adaptation_line.captures(&line) {
-                let time_index = f32::from_str(&cap["time"])?;
-                audio_adaptation_stats
-                    .bitrate
-                    .data
-                    .push_with_index(time_index, f32::from_str(&cap["bitrate"])? / 1000.0);
-                audio_adaptation_stats
-                    .packet_length
-                    .data
-                    .push_with_index(time_index, f32::from_str(&cap["packet_length"])?);
-                continue;
-            }
         }
 
         Ok((
@@ -816,19 +790,135 @@ impl ClientLogReport {
             video_send_stats_map,
             audio_receive_stats_map,
             video_receive_stats_map,
-            audio_adaptation_stats,
         ))
     }
 
-    pub async fn build(file_name: &str, client_name: &str) -> Result<Self> {
+    /// Adaptation records are aperiodic, so they are charted against their log time.
+    async fn parse_adaptation(file_name: &str) -> Result<AudioAdaptation> {
+        let file = File::open(file_name).await?;
+        let reader = BufReader::new(file);
+
+        // Example: [2026-09-30 20:37:26.735 WARN ...] ...: ringrtc_adapt!,audio,out_bitrate,32000,16000
+        let re_adaptation_line = Regex::new(
+            r"^\[(?P<time>\S+ \S+) .*ringrtc_adapt!,audio,(?P<record>\w+),(?P<values>\S*)",
+        )?;
+
+        let mut audio_adaptation = AudioAdaptation {
+            out_bitrate: Stats {
+                data: StatsData::new_skip_n(0),
+                ..Default::default()
+            },
+            out_packet_length: Stats {
+                data: StatsData::new_skip_n(0),
+                ..Default::default()
+            },
+            out_loss_floor: Stats {
+                data: StatsData::new_skip_n(0),
+                ..Default::default()
+            },
+            in_bandwidth: Stats {
+                data: StatsData::new_skip_n(0),
+                ..Default::default()
+            },
+            in_rtt: Stats {
+                data: StatsData::new_skip_n(0),
+                ..Default::default()
+            },
+            in_loss: Stats {
+                data: StatsData::new_skip_n(0),
+                ..Default::default()
+            },
+        };
+
+        let mut start = None;
+        let mut index = 0.0;
+
+        let mut lines = reader.lines();
+        while let Some(line) = lines.next_line().await? {
+            let Some(cap) = re_adaptation_line.captures(&line) else {
+                continue;
+            };
+
+            let time = chrono::NaiveDateTime::parse_from_str(&cap["time"], "%Y-%m-%d %H:%M:%S%.f")?;
+            index = (time - *start.get_or_insert(time)).num_milliseconds() as f32 / 1000.0;
+
+            let values: Vec<f32> = cap["values"]
+                .split(',')
+                .filter_map(|value| f32::from_str(value).ok())
+                .collect();
+            match (&cap["record"], values.as_slice()) {
+                ("config", [_, bitrate, _, _, packet_length, ..]) => {
+                    audio_adaptation
+                        .out_bitrate
+                        .data
+                        .push_with_index(index, bitrate / 1000.0);
+                    audio_adaptation
+                        .out_packet_length
+                        .data
+                        .push_with_index(index, *packet_length);
+                }
+                ("out_bitrate", [_, bitrate]) => {
+                    audio_adaptation
+                        .out_bitrate
+                        .data
+                        .push_with_index(index, bitrate / 1000.0);
+                }
+                ("out_ptime", [_, packet_length]) => {
+                    audio_adaptation
+                        .out_packet_length
+                        .data
+                        .push_with_index(index, *packet_length);
+                }
+                ("loss_floor", [fraction]) => {
+                    audio_adaptation
+                        .out_loss_floor
+                        .data
+                        .push_with_index(index, fraction * 100.0);
+                }
+                ("bandwidth" | "allocation", [bitrate, ..]) => {
+                    audio_adaptation
+                        .in_bandwidth
+                        .data
+                        .push_with_index(index, bitrate / 1000.0);
+                }
+                ("rtt", [rtt]) => audio_adaptation.in_rtt.data.push_with_index(index, *rtt),
+                ("loss", [fraction]) => {
+                    audio_adaptation
+                        .in_loss
+                        .data
+                        .push_with_index(index, fraction * 100.0);
+                }
+                _ => {}
+            }
+        }
+
+        // Hold each output's last value until the last adaptation record.
+        for stats in [
+            &mut audio_adaptation.out_bitrate,
+            &mut audio_adaptation.out_packet_length,
+            &mut audio_adaptation.out_loss_floor,
+        ] {
+            if let Some(&(_, value)) = stats.data.points.last() {
+                stats.data.push_with_index(index, value);
+            }
+        }
+
+        Ok(audio_adaptation)
+    }
+
+    pub async fn build(file_name: &str, client_name: &str, adaptation: bool) -> Result<Self> {
         let (
             connection_stats,
             audio_send_stats,
             video_send_stats_map,
             audio_receive_stats_map,
             video_receive_stats_map,
-            audio_adaptation,
         ) = ClientLogReport::parse(file_name).await?;
+        let audio_adaptation = if adaptation {
+            ClientLogReport::parse_adaptation(file_name).await?
+        } else {
+            AudioAdaptation::default()
+        };
 
         // We assume that all entries in the send stats vectors are in sync.
         // stats in the receive_stats are dependent on the clients join time
@@ -1393,35 +1483,88 @@ impl ClientLogReport {
             });
         }
 
-        let bitrate = Stats {
+        let out_bitrate = Stats {
             config: StatsConfig {
                 title: "Adaptation Bitrate Changes".to_string(),
-                chart_name: format!("{}.audio.adaptation.bitrate.svg", client_name),
+                chart_name: format!("{}.audio.adaptation.out_bitrate.svg", client_name),
                 x_label: "Test Seconds".to_string(),
                 y_label: "Kbps".to_string(),
-                x_max: Some(audio_adaptation.bitrate.data.max_index + 5.0),
+                x_max: Some(audio_adaptation.out_bitrate.data.max_index + 5.0),
                 line_shape: LineShape::Hv,
                 ..Default::default()
             },
-            data: audio_adaptation.bitrate.data,
+            data: audio_adaptation.out_bitrate.data,
         };
 
-        let packet_length = Stats {
+        let out_packet_length = Stats {
             config: StatsConfig {
                 title: "Adaptation Packet Length Changes".to_string(),
-                chart_name: format!("{}.audio.adaptation.packet_length.svg", client_name),
+                chart_name: format!("{}.audio.adaptation.out_packet_length.svg", client_name),
                 x_label: "Test Seconds".to_string(),
                 y_label: "milliseconds".to_string(),
-                x_max: Some(audio_adaptation.packet_length.data.max_index + 5.0),
+                x_max: Some(audio_adaptation.out_packet_length.data.max_index + 5.0),
                 line_shape: LineShape::Hv,
                 ..Default::default()
             },
-            data: audio_adaptation.packet_length.data,
+            data: audio_adaptation.out_packet_length.data,
+        };
+
+        let out_loss_floor = Stats {
+            config: StatsConfig {
+                title: "Adaptation Loss Floor Changes".to_string(),
+                chart_name: format!("{}.audio.adaptation.out_loss_floor.svg", client_name),
+                x_label: "Test Seconds".to_string(),
+                y_label: "%".to_string(),
+                x_max: Some(audio_adaptation.out_loss_floor.data.max_index + 5.0),
+                line_shape: LineShape::Hv,
+                ..Default::default()
+            },
+            data: audio_adaptation.out_loss_floor.data,
+        };
+
+        let in_bandwidth = Stats {
+            config: StatsConfig {
+                title: "Adaptation Bandwidth Input".to_string(),
+                chart_name: format!("{}.audio.adaptation.in_bandwidth.svg", client_name),
+                x_label: "Test Seconds".to_string(),
+                y_label: "Kbps".to_string(),
+                x_max: Some(audio_adaptation.in_bandwidth.data.max_index + 5.0),
+                ..Default::default()
+            },
+            data: audio_adaptation.in_bandwidth.data,
+        };
+
+        let in_rtt = Stats {
+            config: StatsConfig {
+                title: "Adaptation RTT Input".to_string(),
+                chart_name: format!("{}.audio.adaptation.in_rtt.svg", client_name),
+                x_label: "Test Seconds".to_string(),
+                y_label: "milliseconds".to_string(),
+                x_max: Some(audio_adaptation.in_rtt.data.max_index + 5.0),
+                ..Default::default()
+            },
+            data: audio_adaptation.in_rtt.data,
+        };
+
+        let in_loss = Stats {
+            config: StatsConfig {
+                title: "Adaptation Loss Input".to_string(),
+                chart_name: format!("{}.audio.adaptation.in_loss.svg", client_name),
+                x_label: "Test Seconds".to_string(),
+                y_label: "%".to_string(),
+                x_max: Some(audio_adaptation.in_loss.data.max_index + 5.0),
+                ..Default::default()
+            },
+            data: audio_adaptation.in_loss.data,
         };
 
         let audio_adaptation = AudioAdaptation {
-            bitrate,
-            packet_length,
+            out_bitrate,
+            out_packet_length,
+            out_loss_floor,
+            in_bandwidth,
+            in_rtt,
+            in_loss,
         };
 
         Ok(Self {
@@ -1456,6 +1599,8 @@ pub struct Report {
 
     /// If there is no video being tested, don't generate charts or columns for it.
     pub show_video: bool,
+    /// If the client does not use adaptation, don't generate charts for it.
+    pub show_adaptation: bool,
     /// Keep track of how many iterations were assigned for the test case.
     pub iterations: u16,
 }
@@ -1495,6 +1640,7 @@ impl Report {
         let client_log_report = ClientLogReport::build(
             &format!("{}/{}.log", test_case.test_path, client.name),
             &client.name,
+            client_config.audio.adaptation > 0,
         )
         .await?;
 
@@ -1520,6 +1666,7 @@ impl Report {
                 .iter()
                 .any(|config| config.video.input_name.is_some())
                 || client_config.video.input_name.is_some(),
+            show_adaptation: client_config.audio.adaptation > 0,
             iterations: test_case_config.iterations,
         })
     }
@@ -1710,9 +1857,17 @@ impl Report {
             &audio_send_stats.remote_jitter,
             &audio_send_stats.remote_round_trip_time,
             &audio_send_stats.audio_energy,
-            &audio_adaptation.bitrate,
-            &audio_adaptation.packet_length,
         ];
+        if self.show_adaptation {
+            line_chart_stats.extend([
+                &audio_adaptation.out_bitrate,
+                &audio_adaptation.out_packet_length,
+                &audio_adaptation.out_loss_floor,
+                &audio_adaptation.in_bandwidth,
+                &audio_adaptation.in_rtt,
+                &audio_adaptation.in_loss,
+            ]);
+        }
         line_chart_stats.extend(audio_receive_stats.iter().flat_map(|per_ssrc| {
             vec![
                 &per_ssrc.packets_per_second,
@@ -1953,11 +2108,18 @@ impl Report {
             .as_bytes(),
         );
 
-        if test_case_config.client_b_config().audio.adaptation > 0 {
+        if self.show_adaptation {
             let audio_adaptation = &self.client_log_report.audio_adaptation;
             let audio_adaptation = Self::build_stats_rows(
                 html,
-                &[&audio_adaptation.bitrate, &audio_adaptation.packet_length],
+                &[
+                    &audio_adaptation.out_bitrate,
+                    &audio_adaptation.in_bandwidth,
+                    &audio_adaptation.out_packet_length,
+                    &audio_adaptation.in_rtt,
+                    &audio_adaptation.out_loss_floor,
+                    &audio_adaptation.in_loss,
+                ],
             );
             buf.extend_from_slice(
                 html.accordion_section(
@@ -2638,6 +2800,27 @@ enum SummaryRowType {
     AggregateItem,
 }
 
+/// RTT floor (5th percentile) and inflation (largest sample minus the floor), in ms.
+fn rtt_floor_and_inflation(stats: &Stats) -> (f32, f32) {
+    let mut samples: Vec<f32> = stats
+        .data
+        .points
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i >= stats.data.filter_min && *i < stats.data.filter_max)
+        .map(|(_, &(_, rtt))| rtt)
+        // Zero is not reported; above 20 s is a stale estimate.
+        .filter(|rtt| *rtt > 0.0 && *rtt <= 20000.0)
+        .collect();
+    if samples.is_empty() {
+        return (0.0, 0.0);
+    }
+    samples.sort_by(f32::total_cmp);
+    let floor = samples[samples.len() / 20];
+    let peak = samples[samples.len() - 1];
+    (floor, (peak - floor).max(0.0))
+}
+
 /// A convenience struct for tracking the averaged values for a row in the summary report. This
 /// is particularly useful when aggregating values from several rows.
 ///
@@ -2661,6 +2844,10 @@ struct SummaryRow {
     pub audio_receive_loss_std_dev: f32,
     pub concealed_samples_pct: f32,
     pub fec_packets_received_total: f32,
+
+    pub audio_rtt_floor: f32,
+    pub audio_rtt_inflation: f32,
+    pub audio_arrival_delay: f32,
 
     pub container_cpu: f32,
     pub container_memory: f32,
@@ -2738,6 +2925,12 @@ impl SummaryRow {
                 stats.fec_packets_received.data.total,
             )
         });
+        let (audio_rtt_floor, audio_rtt_inflation) = rtt_floor_and_inflation(
+            &report
+                .client_log_report
+                .audio_send_stats
+                .remote_round_trip_time,
+        );
         Self {
             sender_name: stream.and_then(|s| s.sender_name.clone()),
             ssrc: stream.map(|s| s.ssrc.clone()),
@@ -2760,6 +2953,11 @@ impl SummaryRow {
             audio_receive_loss_std_dev,
             concealed_samples_pct,
             fec_packets_received_total: fec_packets_received_total as f32,
+            audio_rtt_floor,
+            audio_rtt_inflation,
+            audio_arrival_delay: stream.map_or(0.0, |stats| {
+                stats.relative_arrival_delay_per_packet.data.ave
+            }),
             container_cpu: report.docker_stats_report.cpu_usage.data.ave,
             container_memory: report.docker_stats_report.mem_usage.data.ave,
             container_tx_bitrate: report.docker_stats_report.tx_bitrate.data.ave,
@@ -2852,6 +3050,11 @@ impl SummaryRow {
             );
             self.concealed_samples_pct =
                 new_average(self.concealed_samples_pct, new.concealed_samples_pct);
+            self.audio_rtt_floor = new_average(self.audio_rtt_floor, new.audio_rtt_floor);
+            self.audio_rtt_inflation =
+                new_average(self.audio_rtt_inflation, new.audio_rtt_inflation);
+            self.audio_arrival_delay =
+                new_average(self.audio_arrival_delay, new.audio_arrival_delay);
             self.fec_packets_received_total = new_average(
                 self.fec_packets_received_total,
                 new.fec_packets_received_total,
@@ -3639,6 +3842,19 @@ impl Html {
             );
         }
 
+        if group_config.summary_report_columns.show_delay_stats {
+            let _ = writeln!(buf, "<td>{}{:.0}</td>", indent, summary_row.audio_rtt_floor);
+            let _ = writeln!(
+                buf,
+                "<td>{}{:.0}</td>",
+                indent, summary_row.audio_rtt_inflation
+            );
+            let _ = writeln!(
+                buf,
+                "<td>{}{:.0}</td>",
+                indent, summary_row.audio_arrival_delay
+            );
+        }
         let _ = writeln!(buf, "<td>{}{:.2}</td>", indent, summary_row.container_cpu);
         let _ = writeln!(
             buf,
@@ -3753,6 +3969,9 @@ impl Html {
                 "<th colspan=\"{recv_colspan}\">Client Receive Stats (average)</th>"
             );
         }
+        if group_config.summary_report_columns.show_delay_stats {
+            buf.push_str("<th colspan=\"3\">Queuing Delay (ms)</th>\n");
+        }
         buf.push_str("<th colspan=\"4\">Container Stats (average)</th>\n");
 
         let mut visqol_colspan = 0;
@@ -3817,6 +4036,11 @@ impl Html {
             buf.push_str("<th>Cncl Rate</th>\n");
             buf.push_str("<th>Cncl /Loss</th>\n");
             buf.push_str("<th>FEC</th>\n");
+        }
+        if group_config.summary_report_columns.show_delay_stats {
+            buf.push_str("<th>RTT Floor</th>\n");
+            buf.push_str("<th>RTT Infl</th>\n");
+            buf.push_str("<th>Arrival</th>\n");
         }
 
         buf.push_str("<th>CPU</th>\n");

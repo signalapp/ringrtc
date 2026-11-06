@@ -1403,6 +1403,91 @@ async fn run_tcc_tests(test: &mut Test) -> Result<()> {
     Ok(())
 }
 
+async fn run_adaptation_tests(test: &mut Test) -> Result<()> {
+    let adaptation_values = [0, 1, 2, 3, 4, 5];
+
+    let test_cases = adaptation_values
+        .into_iter()
+        .map(|adaptation| {
+            let audio = AudioConfig {
+                input_name: "normal_12s".to_string(),
+                initial_bitrate_bps: 32000,
+                min_bitrate_bps: 16000,
+                max_bitrate_bps: 32000,
+                min_packet_size_ms: if matches!(adaptation, 2 | 3) { 20 } else { 60 },
+                max_packet_size_ms: if matches!(adaptation, 2 | 3 | 5) {
+                    120
+                } else {
+                    60
+                },
+                adaptation,
+                enable_tcc: (1..=4).contains(&adaptation),
+                rtcp_report_interval_ms: 2500,
+                ..Default::default()
+            };
+
+            TestCaseConfig {
+                test_case_name: format!("adaptation-{adaptation}"),
+                length_seconds: 300,
+                client_configs: vec![
+                    CallConfig {
+                        audio: AudioConfig {
+                            generate_spectrogram: false,
+                            ..audio.clone()
+                        },
+                        ..Default::default()
+                    },
+                    CallConfig {
+                        audio: AudioConfig {
+                            analysis_mode: AudioAnalysisMode::Chopped,
+                            visqol_speech_analysis: true,
+                            visqol_audio_analysis: true,
+                            pesq_speech_analysis: true,
+                            plc_speech_analysis: true,
+                            ..audio
+                        },
+                        ..Default::default()
+                    },
+                ],
+                iterations: 3,
+                ..Default::default()
+            }
+        })
+        .collect::<Vec<_>>();
+
+    test.run(
+        GroupConfig {
+            group_name: "adaptation_tests".to_string(),
+            summary_report_columns: SummaryReportColumns {
+                show_visqol_mos_speech: true,
+                show_visqol_mos_audio: true,
+                show_pesq_mos: true,
+                show_plc_mos: true,
+                show_video: false,
+                show_delay_stats: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        test_cases,
+        vec![
+            NetworkProfile::None,
+            NetworkProfile::NominalAccess,
+            NetworkProfile::ChokedAccess,
+            NetworkProfile::ChokedAccessSevere,
+            NetworkProfile::ChokedAccessSevereIntl,
+            NetworkProfile::ChokedAccessSevereDeep,
+            NetworkProfile::ShallowBufferChoke,
+            NetworkProfile::BurstLossOnly,
+            NetworkProfile::BriefSpikes,
+            NetworkProfile::SustainedChoke,
+        ],
+    )
+    .await?;
+
+    Ok(())
+}
+
 pub fn format_log_line(
     buf: &mut env_logger::fmt::Formatter,
     record: &log::Record<'_>,
@@ -1526,6 +1611,7 @@ async fn main() -> Result<()> {
             "dred_tests" => run_dred_tests(test).await?,
             "dred_flush_tests" => run_dred_flush_tests(test).await?,
             "tcc_tests" => run_tcc_tests(test).await?,
+            "adaptation_tests" => run_adaptation_tests(test).await?,
             _ => panic!("unknown test set \"{test_set_name}\""),
         }
         test.report().await?;

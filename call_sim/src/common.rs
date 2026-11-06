@@ -193,6 +193,8 @@ pub struct SummaryReportColumns {
     pub show_send_stats: bool,
     /// Show client receive stats columns in the summary.
     pub show_receive_stats: bool,
+    /// Show queuing delay columns in the summary.
+    pub show_delay_stats: bool,
 }
 
 impl Default for SummaryReportColumns {
@@ -205,6 +207,7 @@ impl Default for SummaryReportColumns {
             show_video: true,
             show_send_stats: true,
             show_receive_stats: true,
+            show_delay_stats: false,
         }
     }
 }
@@ -219,6 +222,7 @@ impl SummaryReportColumns {
             show_video: false,
             show_send_stats: true,
             show_receive_stats: true,
+            show_delay_stats: false,
         }
     }
 }
@@ -632,7 +636,8 @@ impl NetworkConfigWithOffset {
 }
 
 /// General structure for network emulation settings.
-/// (see https://manpages.ubuntu.com/manpages/jammy/man8/tc-netem.8.html)
+/// (see https://manpages.ubuntu.com/manpages/resolute/man8/tc-netem.8.html and
+/// https://man7.org/linux/man-pages/man8/tc-htb.8.html for more information)
 #[derive(Copy, Clone, Default, Debug)]
 pub struct NetworkConfig {
     /// ms (if 0, won't be used)
@@ -657,6 +662,8 @@ pub struct NetworkConfig {
     pub reorder_gap: u8,
     /// kbps (if 0, won't be used)
     pub rate: u32,
+    /// bytes, the HTB burst and cburst for `rate` (if 0, 3000 is used)
+    pub burst: u32,
     /// packets (if 0, won't be used)
     pub limit: u32,
     /// ms to accumulate in a slot before delivering packets (if 0, won't be used)
@@ -705,26 +712,20 @@ impl fmt::Display for Distribution {
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 pub enum GeLossModel {
-    Bernoulli {
-        p: u8,
-    },
-    SimpleGilbert {
-        p: u8,
-        r: u8,
-    },
-    Gilbert {
-        p: u8,
-        r: u8,
-        one_minus_h: u8,
-    },
+    /// Each packet is lost independently with probability p.
+    Bernoulli { p: u8 },
+    /// Every packet is lost in the bad state and none in the good state.
+    /// p starts a burst and r ends it: loss = p/(p+r), mean burst = 100/r packets.
+    SimpleGilbert { p: u8, r: u8 },
+    /// SimpleGilbert, but a packet in the bad state is only lost with probability 1-h.
+    /// loss = (1-h) * p/(p+r), so bursts can have gaps.
+    Gilbert { p: u8, r: u8, one_minus_h: u8 },
+    /// Gilbert, but a packet in the good state is also lost with probability 1-k.
+    /// loss = ((1-h) * p + (1-k) * r)/(p+r), adding isolated losses between bursts.
     GilbertElliot {
-        /// Transition probability from the good state to the bad state.
         p: u8,
-        /// Transition probability from the bad state to the good state.
         r: u8,
-        /// 1-h, the loss probability while in the bad state. (default: 1)
         one_minus_h: u8,
-        /// 1-k, the loss probability while in the good state. (default: 0)
         one_minus_k: u8,
     },
 }
@@ -828,6 +829,125 @@ pub enum NetworkProfile {
     SimpleLoss(u8),
     /// Sets a bandwidth limitation (kbps).
     LimitedBandwidth(u32),
+
+    // Calibrated to field measurements.
+    /// A healthy access link: 150 kbps, 200 ms queue, 70 ms RTT, no capacity drops.
+    NominalAccess,
+    /// 120 kbps dropping to 28 kbps for 20% of the call, 500 ms queue, 80 ms RTT.
+    ChokedAccess,
+    /// 90 kbps dropping to 16 kbps for 40% of the call, 1500 ms queue, 70 ms RTT.
+    ChokedAccessSevere,
+    /// [NetworkProfile::ChokedAccessSevere] with a 250 ms RTT.
+    ChokedAccessSevereIntl,
+    /// [NetworkProfile::ChokedAccessSevere] with a 4000 ms queue.
+    ChokedAccessSevereDeep,
+    /// [NetworkProfile::ChokedAccess] with a 60 ms queue, so drops cause loss instead of delay.
+    ShallowBufferChoke,
+    /// [NetworkProfile::NominalAccess] with bursty loss (~14%).
+    BurstLossOnly,
+    /// [NetworkProfile::ChokedAccess] with seven 10 s drops.
+    BriefSpikes,
+    /// 28 kbps for the whole call, 500 ms queue, 80 ms RTT.
+    SustainedChoke,
+}
+
+/// A bottleneck link whose capacity drops at scheduled times.
+struct Bottleneck {
+    /// Round-trip time without queuing, for the whole call (ms).
+    rtt_ms: u32,
+    /// Capacity outside of drops (kbps).
+    capacity_kbps: u32,
+    /// Queue depth, as round-trip queuing delay at the current capacity (ms).
+    queue_ms: u32,
+    /// Capacity during drops (kbps).
+    reduced_capacity_kbps: u32,
+    /// Each drop as (start, duration), with start measured from the start of the call.
+    drops: &'static [(Duration, Duration)],
+    /// Random loss, for the whole call.
+    loss: Option<Loss>,
+}
+
+const NOMINAL_ACCESS: Bottleneck = Bottleneck {
+    rtt_ms: 70,
+    capacity_kbps: 150,
+    queue_ms: 200,
+    reduced_capacity_kbps: 0,
+    drops: &[],
+    loss: None,
+};
+
+const CHOKED_ACCESS: Bottleneck = Bottleneck {
+    rtt_ms: 80,
+    capacity_kbps: 120,
+    queue_ms: 500,
+    reduced_capacity_kbps: 28,
+    drops: &[
+        (Duration::from_secs(45), Duration::from_secs(10)),
+        (Duration::from_secs(120), Duration::from_secs(10)),
+        (Duration::from_secs(200), Duration::from_secs(40)),
+    ],
+    loss: None,
+};
+
+const CHOKED_ACCESS_SEVERE: Bottleneck = Bottleneck {
+    rtt_ms: 70,
+    capacity_kbps: 90,
+    queue_ms: 1500,
+    reduced_capacity_kbps: 16,
+    drops: &[
+        (Duration::from_secs(20), Duration::from_secs(10)),
+        (Duration::from_secs(75), Duration::from_secs(10)),
+        (Duration::from_secs(100), Duration::from_secs(40)),
+        (Duration::from_secs(165), Duration::from_secs(10)),
+        (Duration::from_secs(195), Duration::from_secs(40)),
+        (Duration::from_secs(250), Duration::from_secs(10)),
+    ],
+    loss: None,
+};
+
+impl Bottleneck {
+    fn network_config(&self, capacity_kbps: u32) -> NetworkConfig {
+        // Emulation is applied on each client's egress, so round-trip values are halved.
+        let delay = self.rtt_ms / 2;
+        let queue_ms = self.queue_ms / 2;
+        NetworkConfig {
+            delay,
+            delay_variability: 5,
+            delay_variation_strategy: Some(DelayVariationStrategy::Correlation(50)),
+            loss: self.loss,
+            rate: capacity_kbps,
+            // Near one MTU, so a capacity drop takes effect at once.
+            burst: 1600,
+            // The netem queue also holds the packets in its delay stage.
+            limit: (packets(capacity_kbps, queue_ms) + packets(capacity_kbps, delay)).max(2),
+            ..Default::default()
+        }
+    }
+
+    fn config(&self) -> Vec<NetworkConfigWithOffset> {
+        let mut configs = vec![NetworkConfigWithOffset {
+            offset: Duration::from_secs(2),
+            network_config: self.network_config(self.capacity_kbps),
+        }];
+
+        for &(start, duration) in self.drops {
+            configs.push(NetworkConfigWithOffset {
+                offset: start,
+                network_config: self.network_config(self.reduced_capacity_kbps),
+            });
+            configs.push(NetworkConfigWithOffset {
+                offset: start + duration,
+                network_config: self.network_config(self.capacity_kbps),
+            });
+        }
+
+        configs
+    }
+}
+
+/// Packets that hold `ms` of traffic at `capacity_kbps`, at 300 bytes (32 kbps Opus at 60 ms).
+fn packets(capacity_kbps: u32, ms: u32) -> u32 {
+    (capacity_kbps * ms).div_ceil(300 * 8)
 }
 
 impl NetworkProfile {
@@ -848,6 +968,15 @@ impl NetworkProfile {
             NetworkProfile::LimitedBandwidth(rate) => {
                 format!("limited_bandwidth_{}", rate)
             }
+            NetworkProfile::NominalAccess => "nominal_access".to_string(),
+            NetworkProfile::ChokedAccess => "choked_access".to_string(),
+            NetworkProfile::ChokedAccessSevere => "choked_access_severe".to_string(),
+            NetworkProfile::ChokedAccessSevereIntl => "choked_access_severe_intl".to_string(),
+            NetworkProfile::ChokedAccessSevereDeep => "choked_access_severe_deep".to_string(),
+            NetworkProfile::ShallowBufferChoke => "shallow_buffer_choke".to_string(),
+            NetworkProfile::BurstLossOnly => "burst_loss_only".to_string(),
+            NetworkProfile::BriefSpikes => "brief_spikes".to_string(),
+            NetworkProfile::SustainedChoke => "sustained_choke".to_string(),
         }
     }
 
@@ -870,6 +999,7 @@ impl NetworkProfile {
                         delay_variation_strategy: Some(DelayVariationStrategy::Distribution(
                             Distribution::Pareto,
                         )),
+                        // 5% independent loss.
                         loss: Some(Loss::State(MarkovLossModel::Bernoulli { p13: 5 })),
                         ..Default::default()
                     },
@@ -884,6 +1014,7 @@ impl NetworkProfile {
                         delay_variation_strategy: Some(DelayVariationStrategy::Distribution(
                             Distribution::Pareto,
                         )),
+                        // Emulate a ~11% loss with a mean burst of 4 packets.
                         loss: Some(Loss::GeModel(GeLossModel::SimpleGilbert { p: 3, r: 25 })),
                         duplication: 2,
                         reorder: 5,
@@ -912,6 +1043,7 @@ impl NetworkProfile {
                             delay: 100,
                             delay_variability: 20,
                             delay_variation_strategy: Some(DelayVariationStrategy::Correlation(50)),
+                            // Emulate a ~31% loss with a mean burst of 4 packets.
                             loss: Some(Loss::GeModel(GeLossModel::SimpleGilbert { p: 11, r: 25 })),
                             ..Default::default()
                         },
@@ -958,6 +1090,52 @@ impl NetworkProfile {
                     },
                 }]
             }
+            NetworkProfile::NominalAccess => NOMINAL_ACCESS.config(),
+            NetworkProfile::ChokedAccess => CHOKED_ACCESS.config(),
+            NetworkProfile::ChokedAccessSevere => CHOKED_ACCESS_SEVERE.config(),
+            NetworkProfile::ChokedAccessSevereIntl => Bottleneck {
+                rtt_ms: 250,
+                ..CHOKED_ACCESS_SEVERE
+            }
+            .config(),
+            NetworkProfile::ChokedAccessSevereDeep => Bottleneck {
+                queue_ms: 4000,
+                ..CHOKED_ACCESS_SEVERE
+            }
+            .config(),
+            NetworkProfile::ShallowBufferChoke => Bottleneck {
+                queue_ms: 60,
+                ..CHOKED_ACCESS
+            }
+            .config(),
+            NetworkProfile::BurstLossOnly => Bottleneck {
+                // Emulate a ~14% loss with a mean burst of 4 packets.
+                loss: Some(Loss::GeModel(GeLossModel::SimpleGilbert { p: 4, r: 25 })),
+                ..NOMINAL_ACCESS
+            }
+            .config(),
+            NetworkProfile::BriefSpikes => Bottleneck {
+                drops: const {
+                    &[
+                        (Duration::from_secs(30), Duration::from_secs(10)),
+                        (Duration::from_secs(70), Duration::from_secs(10)),
+                        (Duration::from_secs(110), Duration::from_secs(10)),
+                        (Duration::from_secs(150), Duration::from_secs(10)),
+                        (Duration::from_secs(190), Duration::from_secs(10)),
+                        (Duration::from_secs(230), Duration::from_secs(10)),
+                        (Duration::from_secs(270), Duration::from_secs(10)),
+                    ]
+                },
+                ..CHOKED_ACCESS
+            }
+            .config(),
+            NetworkProfile::SustainedChoke => Bottleneck {
+                rtt_ms: 80,
+                capacity_kbps: 28,
+                queue_ms: 500,
+                ..NOMINAL_ACCESS
+            }
+            .config(),
         }
     }
 }

@@ -5,7 +5,7 @@
 
 use std::{path::Path, process::Stdio, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bollard::{
     Docker,
     models::ContainerMemoryStats,
@@ -15,7 +15,7 @@ use bollard::{
 use chrono::DateTime;
 use futures_util::stream::StreamExt;
 use itertools::Itertools;
-use log::{error, info};
+use log::{error, info, warn};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncWriteExt, stdout},
@@ -445,6 +445,15 @@ pub async fn start_client(
     Ok(())
 }
 
+/// HTB burst and cburst, in bytes.
+fn htb_burst(network_config: &NetworkConfig) -> u32 {
+    if network_config.burst > 0 {
+        network_config.burst
+    } else {
+        3000
+    }
+}
+
 /// Appends netem options to args vector based on the given NetworkConfig.
 fn append_netem_options(network_config: &NetworkConfig, args: &mut Vec<String>) {
     // limit: maximum number of packets the qdisc may hold queued at a time.
@@ -657,9 +666,9 @@ pub async fn emulate_network_start(
             "quantum",
             "1500",
             "burst",
-            "3000",
+            &htb_burst(network_config).to_string(),
             "cburst",
-            "3000",
+            &htb_burst(network_config).to_string(),
         ])
         .spawn()?
         .wait()
@@ -847,10 +856,13 @@ pub async fn emulate_network_change(name: &str, network_config: &NetworkConfig) 
             &format!("{}.0kbit", rate),
             "ceil",
             &format!("{}.0kbit", rate),
+            // Otherwise HTB derives a sub-MTU quantum at low rates.
+            "quantum",
+            "1500",
             "burst",
-            "3000",
+            &htb_burst(network_config).to_string(),
             "cburst",
-            "3000",
+            &htb_burst(network_config).to_string(),
         ])
         .spawn()?
         .wait()
@@ -1459,7 +1471,16 @@ pub async fn convert_raw_to_wav(
         args.push(format!("{}", length));
     }
 
-    let _ = Command::new("docker").args(&args).spawn()?.wait().await?;
+    let convert = Command::new("docker").args(&args).output().await?;
+    if !convert.status.success() {
+        anyhow::bail!(
+            "sox failed to convert `{}` to `{}` ({}): {}",
+            raw_file,
+            wav_file,
+            convert.status,
+            String::from_utf8_lossy(&convert.stderr).trim()
+        );
+    }
 
     let output = Command::new("docker")
         .args([
@@ -1474,10 +1495,22 @@ pub async fn convert_raw_to_wav(
         ])
         .output()
         .await?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "soxi failed to read the duration of `{}` ({}): {}",
+            wav_file,
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
 
-    Ok(std::str::from_utf8(output.stdout.as_slice())?
-        .trim()
-        .parse::<f64>()?)
+    let duration = std::str::from_utf8(output.stdout.as_slice())?.trim();
+    duration.parse::<f64>().with_context(|| {
+        format!(
+            "soxi returned an invalid duration for `{}`: `{}`",
+            wav_file, duration
+        )
+    })
 }
 
 pub async fn convert_wav_to_16khz_mono(
@@ -1505,7 +1538,16 @@ pub async fn convert_wav_to_16khz_mono(
     .map(String::from)
     .to_vec();
 
-    let _ = Command::new("docker").args(&args).spawn()?.wait().await?;
+    let output = Command::new("docker").args(&args).output().await?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "sox failed to convert `{}` to 16kHz/mono `{}` ({}): {}",
+            input_file,
+            output_file,
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
 
     Ok(())
 }
@@ -1566,7 +1608,7 @@ pub async fn convert_yuv_to_mp4(
 pub async fn generate_spectrogram(location: &str, wav_file: &str, extension: &str) -> Result<()> {
     info!("Generating spectrogram for `{}`:", wav_file);
 
-    let _ = Command::new("docker")
+    let output = Command::new("docker")
         .args([
             "run",
             "--rm",
@@ -1586,9 +1628,16 @@ pub async fn generate_spectrogram(location: &str, wav_file: &str, extension: &st
             "-o",
             &format!("{}.{}", wav_file, extension),
         ])
-        .spawn()?
-        .wait()
+        .output()
         .await?;
+    if !output.status.success() {
+        warn!(
+            "sox failed to generate a spectrogram for `{}` ({}): {}",
+            wav_file,
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
 
     Ok(())
 }
