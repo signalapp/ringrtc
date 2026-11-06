@@ -47,7 +47,7 @@ RUSTEXPORT void Rust_createOffer(
     ptr::BorrowedRc<webrtc::rffi::CreateSessionDescriptionObserverRffi>
         csd_observer_borrowed_rc);
 
-// If using asymmetric codecs, add a send-only transceiver for the send stream.
+// Add a send-only transceiver for the send stream.
 RUSTEXPORT bool Rust_createSendOnlyTransceiver(
     ptr::BorrowedRc<webrtc::PeerConnectionInterface>
         peer_connection_borrowed_rc);
@@ -87,8 +87,6 @@ typedef struct {
   // These all just refer to the storage
   ptr::Borrowed<const char> ice_ufrag_borrowed;
   ptr::Borrowed<const char> ice_pwd_borrowed;
-  ptr::Borrowed<RffiVideoCodec> bidirectional_video_codecs_borrowed;
-  size_t bidirectional_video_codecs_size;
   ptr::Borrowed<RffiVideoCodec> encode_only_video_codecs_borrowed;
   size_t encode_only_video_codecs_size;
   ptr::Borrowed<RffiVideoCodec> decode_only_video_codecs_borrowed;
@@ -112,14 +110,6 @@ RUSTEXPORT ptr::Owned<RffiConnectionParametersV4> Rust_sessionDescriptionToV4(
     bool enable_vp9_encode,
     bool enable_vp9_decode);
 
-// Legacy version of the above - used for communicating with clients that only
-// support symmetric codecs.
-RUSTEXPORT ptr::Owned<RffiConnectionParametersV4>
-Rust_sessionDescriptionToV4Legacy(
-    ptr::Borrowed<const webrtc::SessionDescriptionInterface>
-        session_description_borrowed,
-    bool enable_vp9);
-
 RUSTEXPORT void Rust_deleteV4(ptr::Owned<RffiConnectionParametersV4> v4_owned);
 
 RUSTEXPORT ptr::Owned<webrtc::SessionDescriptionInterface>
@@ -130,15 +120,6 @@ Rust_sessionDescriptionFromV4(
     bool enable_vp9_encode,
     bool enable_vp9_decode,
     bool v4_is_local);
-
-// Legacy version of the above - used for communicating with clients that only
-// support symmetric codecs.
-RUSTEXPORT ptr::Owned<webrtc::SessionDescriptionInterface>
-Rust_sessionDescriptionFromV4Legacy(
-    bool offer,
-    ptr::Borrowed<const RffiConnectionParametersV4> v4_borrowed,
-    bool enable_tcc_audio,
-    bool enable_vp9);
 
 RUSTEXPORT ptr::Owned<webrtc::SessionDescriptionInterface>
 Rust_localDescriptionForGroupCall(

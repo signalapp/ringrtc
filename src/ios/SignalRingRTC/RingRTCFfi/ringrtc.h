@@ -1034,8 +1034,6 @@ typedef const struct RffiVideoCodec *Borrowed_RffiVideoCodec;
 typedef struct RffiConnectionParametersV4 {
     Borrowed_c_char ice_ufrag;
     Borrowed_c_char ice_pwd;
-    Borrowed_RffiVideoCodec bidirectional_video_codecs;
-    uintptr_t bidirectional_video_codecs_size;
     Borrowed_RffiVideoCodec encode_only_video_codecs;
     uintptr_t encode_only_video_codecs_size;
     Borrowed_RffiVideoCodec decode_only_video_codecs;
@@ -2383,19 +2381,11 @@ extern bool Rust_disableDtlsAndSetSrtpKey(Borrowed_RffiSessionDescription sessio
                                           Borrowed_u8 salt_data,
                                           size_t salt_len);
 
-extern Owned_RffiConnectionParametersV4 Rust_sessionDescriptionToV4Legacy(Borrowed_RffiSessionDescription v4,
-                                                                          bool enable_vp9);
-
 extern Owned_RffiConnectionParametersV4 Rust_sessionDescriptionToV4(Borrowed_RffiSessionDescription v4,
                                                                     bool enable_vp9_encode,
                                                                     bool enable_vp9_decode);
 
 extern void Rust_deleteV4(Owned_RffiConnectionParametersV4 session_description);
-
-extern Owned_RffiSessionDescription Rust_sessionDescriptionFromV4Legacy(bool offer,
-                                                                        Borrowed_RffiConnectionParametersV4 v4,
-                                                                        bool enable_tcc_audio,
-                                                                        bool enable_vp9);
 
 extern Owned_RffiSessionDescription Rust_sessionDescriptionFromV4(bool offer,
                                                                   Borrowed_RffiConnectionParametersV4 v4,

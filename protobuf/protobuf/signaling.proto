@@ -63,9 +63,7 @@ message ConnectionParametersV4 {
   optional bytes public_key = 1;
   optional string ice_ufrag = 2;
   optional string ice_pwd = 3;
-  // DEPRECATED - This is now confusing nomenclature!
-  // It represents the video codecs the sender can both receive AND send.
-  repeated VideoCodec receive_video_codecs = 4;
+  reserved 4;  // Represented the video codecs the sender can both receive AND send.
   // Used at call establishment to convey the bitrate that the signaling sender (media receiver)
   // wants the signaling receiver (media sender) to send.
   optional uint64 max_bitrate_bps = 5;
