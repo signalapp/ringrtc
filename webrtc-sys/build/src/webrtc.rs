@@ -18,7 +18,7 @@ use xshell::{Shell, cmd};
 
 pub fn prepare_workspace_shell() -> anyhow::Result<Shell> {
     let mut sh = Shell::new()?;
-    if *TARGET_PLATFORM == "windows" {
+    if *TARGET_OS == "windows" {
         sh.set_var("DEPOT_TOOLS_WIN_TOOLCHAIN", "0");
     }
 
@@ -51,6 +51,17 @@ pub fn sync_webrtc_source(sh: &mut Shell) -> anyhow::Result<()> {
     );
     let gclient_file = *GCLIENT_FILE;
     let revision = WEBRTC_VERSION.as_str();
+
+    // Records what the checkout was last synced to: the version and the gclient file.
+    let stamp_path = format!("{}/.webrtc-sys-synced", *LIBWEBRTC_DIR);
+    let stamp = format!(
+        "{revision}\n{}",
+        fs::read_to_string(format!("{}/{gclient_file}", *LIBWEBRTC_DIR))?
+    );
+    if !should_sync(sh, &stamp_path, &stamp, revision) {
+        return Ok(());
+    }
+
     sh.change_dir(LIBWEBRTC_DIR.as_str());
     let env_vars = HashMap::from([
         ("WEBRTC_DIR", LIBWEBRTC_DIR.clone()),
@@ -66,16 +77,126 @@ pub fn sync_webrtc_source(sh: &mut Shell) -> anyhow::Result<()> {
     )
     .envs(env_vars)
     .run()?;
+    fs::write(stamp_path, stamp)?;
     Ok(())
 }
 
+// Whether gclient sync needs to run. Syncing is skipped when the checkout is already at this
+// version, so that rebuilding after editing libwebrtc/src doesn't sync over the edits.
+fn should_sync(sh: &Shell, stamp_path: &str, stamp: &str, revision: &str) -> bool {
+    let src_dir = format!("{}/src", *LIBWEBRTC_DIR);
+    if !Path::new(&src_dir).exists() {
+        return true;
+    }
+
+    if fs::read_to_string(stamp_path).ok().as_deref() == Some(stamp)
+        && has_remote_revision(sh, &src_dir, revision)
+    {
+        println!("WebRTC source already synced to '{revision}'; skipping gclient sync");
+        return false;
+    }
+
+    // gclient refuses to sync a checkout with uncommitted changes. Build the edits instead of
+    // failing; the stamp isn't written, so the next rerun tries to sync again.
+    let dirty: Vec<_> = [src_dir.clone(), format!("{src_dir}/third_party")]
+        .into_iter()
+        .filter(|dir| has_uncommitted_changes(sh, dir))
+        .collect();
+    if !dirty.is_empty() {
+        println!(
+            "cargo:warning=Not syncing WebRTC to '{revision}' because of uncommitted changes in {}; commit or stash them to sync",
+            dirty.join(", ")
+        );
+        return false;
+    }
+
+    true
+}
+
+// Whether the checkout already contains the commit that `revision`, a tag or a branch. References current
+// remote version
+fn has_remote_revision(sh: &Shell, src_dir: &str, revision: &str) -> bool {
+    let refs = match cmd!(sh, "git -C {src_dir} ls-remote origin {revision}")
+        .quiet()
+        .read()
+    {
+        Ok(refs) => refs,
+        Err(e) => {
+            println!(
+                "cargo:warning=Couldn't check the remote for WebRTC '{revision}'; using the existing checkout: {e}"
+            );
+            return true;
+        }
+    };
+    // Like git, prefer a tag over a branch, and use the commit an annotated tag points to.
+    let names = [
+        format!("refs/tags/{revision}^{{}}"),
+        format!("refs/tags/{revision}"),
+        format!("refs/heads/{revision}"),
+    ];
+    let Some(commit) = names.iter().find_map(|name| {
+        refs.lines().find_map(|line| {
+            let (hash, line_name) = line.split_once('\t')?;
+            (line_name == name).then_some(hash)
+        })
+    }) else {
+        println!(
+            "cargo:warning=WebRTC '{revision}' not found on the remote; using the existing checkout"
+        );
+        return true;
+    };
+    // Fails when the commit isn't in the checkout, including when it hasn't been fetched.
+    cmd!(
+        sh,
+        "git -C {src_dir} merge-base --is-ancestor {commit} HEAD"
+    )
+    .quiet()
+    .ignore_stderr()
+    .run()
+    .is_ok()
+}
+
+// Matches the check gclient makes before syncing a checkout; untracked files don't count.
+fn has_uncommitted_changes(sh: &Shell, dir: &str) -> bool {
+    cmd!(
+        sh,
+        "git -C {dir} status --porcelain --untracked-files=no --ignore-submodules"
+    )
+    .quiet()
+    .ignore_stderr()
+    .read()
+    .is_ok_and(|status| !status.is_empty())
+}
+
 pub fn build_webrtc_from_source(sh: Shell) -> anyhow::Result<()> {
+    link_ringrtc_headers()?;
     match *TARGET_PLATFORM {
         "ios" => build_webrtc_for_ios(sh),
         "android" => build_webrtc_for_android(sh),
         "desktop" => build_webrtc_for_desktop(sh),
         _ => bail!("Unsupported target platform {}", *TARGET_PLATFORM),
     }
+}
+
+// Create symlink like in bin/env.sh.
+fn link_ringrtc_headers() -> anyhow::Result<()> {
+    let link = Path::new(LIBWEBRTC_DIR.as_str()).join("src/ringrtc/rffi/api");
+    let target = Path::new(WORKSPACE_DIR.as_str()).join("src/rust/src/webrtc_include");
+    if fs::read_link(&link).is_ok_and(|existing| existing == target) {
+        return Ok(());
+    }
+    match fs::symlink_metadata(&link) {
+        Ok(metadata) if metadata.is_symlink() => {
+            fs::remove_file(&link).or_else(|_| fs::remove_dir(&link))?
+        }
+        Ok(_) => bail!("{} exists and isn't a symlink", link.display()),
+        Err(_) => {}
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &link)?;
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(&target, &link)?;
+    Ok(())
 }
 
 pub fn common_webrtc_flags() -> Vec<String> {
@@ -119,8 +240,9 @@ pub fn build_webrtc_for_desktop(sh: Shell) -> anyhow::Result<()> {
         // https://chromium-review.googlesource.com/c/chromium/src/+/5938657
         cmd!(
             sh,
-            "sed -i '/^[^#].*--allow-experimental-crel/ s/^/#/' src/webrtc/src/build/config/compiler/BUILD.gn"
-        ).run()?;
+            "sed -i '/^[^#].*--allow-experimental-crel/ s/^/#/' build/config/compiler/BUILD.gn"
+        )
+        .run()?;
     }
     let args_flag = args.join(" ");
     cmd!(sh, "gn gen -C {dest} --args={args_flag}").run()?;
@@ -136,7 +258,7 @@ pub fn build_webrtc_for_desktop(sh: Shell) -> anyhow::Result<()> {
     )
     .run()?;
 
-    let filename = if *TARGET_PLATFORM == "windows" {
+    let filename = if *TARGET_OS == "windows" {
         "webrtc.lib"
     } else {
         "libwebrtc.a"
@@ -382,7 +504,7 @@ pub mod config {
     pub static TARGET_SIMULATOR: bool = cfg!(feature = "simulator");
     pub static TARGET_PLATFORM: LazyLock<&str> = LazyLock::new(|| match TARGET_OS.as_str() {
         "ios" => "ios",
-        "android" => "ios",
+        "android" => "android",
         "windows" | "macos" | "linux" => "desktop",
         _ => panic!("Unsupported TARGET OS"),
     });

@@ -57,7 +57,7 @@ jobs:
     - name: Check Swift package
       run: ./bin/check-swift-package
     - name: Clippy
-      run: cargo clippy --all-targets -- -D warnings
+      run: cargo clippy --workspace --all-targets -- -D warnings
     - name: Clippy (with sim)
       run: cargo clippy --all-targets --features sim -- -D warnings
     - name: Clippy (Android & iOS)
