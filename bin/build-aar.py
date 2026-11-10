@@ -219,6 +219,7 @@ def BuildArch(webrtc_src_dir, build_dir, arch, debug,
 
         cargo_args = [
             'cargo', 'rustc',
+            '--crate-type', 'cdylib',
             '--target', cargo_target,
             '--target-dir', output_dir,
             '--manifest-path', os.path.join(PROJECT_DIR, 'src', 'rust', 'Cargo.toml'),
