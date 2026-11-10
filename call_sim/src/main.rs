@@ -1191,24 +1191,35 @@ async fn run_dred_tests(test: &mut Test) -> Result<()> {
 /// jitter buffer. STUN bypasses the emulation so that ICE stays writable during the stalls.
 async fn run_dred_flush_tests(test: &mut Test) -> Result<()> {
     let configs = [
-        (0, "off", None),
-        (
-            0,
-            "smart_default",
-            Some("WebRTC-Audio-NetEqSmartFlushing/enabled:true"),
-        ),
-        (100, "off", None),
+        (0, "off", None),   // Upstream configuration
+        (100, "off", None), // Pre-smart flushing configuration
         (
             100,
-            "smart",
+            "smart_600x2",
             Some(
                 "WebRTC-Audio-NetEqSmartFlushing/enabled:true,target_level_threshold_ms:600,target_level_multiplier:2",
             ),
         ),
         (
             100,
-            "smart_default",
-            Some("WebRTC-Audio-NetEqSmartFlushing/enabled:true"),
+            "smart_1000x2",
+            Some(
+                "WebRTC-Audio-NetEqSmartFlushing/enabled:true,target_level_threshold_ms:1000,target_level_multiplier:2",
+            ),
+        ),
+        (
+            100,
+            "smart_1000x3",
+            Some(
+                "WebRTC-Audio-NetEqSmartFlushing/enabled:true,target_level_threshold_ms:1000,target_level_multiplier:3",
+            ),
+        ),
+        (
+            100,
+            "smart_1500x2",
+            Some(
+                "WebRTC-Audio-NetEqSmartFlushing/enabled:true,target_level_threshold_ms:1500,target_level_multiplier:2",
+            ),
         ),
     ];
 
@@ -1257,6 +1268,7 @@ async fn run_dred_flush_tests(test: &mut Test) -> Result<()> {
         }
     });
 
+    // Emulate a ~20% loss with a mean burst of 8 packets.
     let loss = Some(Loss::GeModel(GeLossModel::SimpleGilbert { p: 3, r: 12 }));
 
     test.run(
@@ -1296,6 +1308,26 @@ async fn run_dred_flush_tests(test: &mut Test) -> Result<()> {
                     NetworkConfigWithOffset::loss_and_rate(91, None, 240),
                     NetworkConfigWithOffset::loss_and_rate(98, None, 1),
                     NetworkConfigWithOffset::loss_and_rate(103, None, 240),
+                ],
+            ),
+            // No loss. 4 s bottlenecks at 30 kbps (~1 s, segment 1) and 27 kbps (~1.5 s, segment
+            // 5), and 2 s (~2 s) and 3 s (flush boundary) stalls at 4 kbps in segments 2-3, 6-7.
+            NetworkProfile::Custom(
+                "stall_2s_3s_graded".to_string(),
+                vec![
+                    NetworkConfigWithOffset::loss_and_rate(0, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(14, None, 30),
+                    NetworkConfigWithOffset::loss_and_rate(18, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(26, None, 4),
+                    NetworkConfigWithOffset::loss_and_rate(28, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(38, None, 4),
+                    NetworkConfigWithOffset::loss_and_rate(41, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(62, None, 27),
+                    NetworkConfigWithOffset::loss_and_rate(66, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(74, None, 4),
+                    NetworkConfigWithOffset::loss_and_rate(76, None, 240),
+                    NetworkConfigWithOffset::loss_and_rate(86, None, 4),
+                    NetworkConfigWithOffset::loss_and_rate(89, None, 240),
                 ],
             ),
             // 20% Gilbert loss with 8 s (full flush) and 2 s (mid level) stalls at 4 kbps, each in
