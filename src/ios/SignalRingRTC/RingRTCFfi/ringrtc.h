@@ -1862,7 +1862,7 @@ extern BorrowedRc_RffiPeerConnection Rust_borrowPeerConnectionFromJniOwnedPeerCo
 #endif
 
 #if defined(TARGET_OS_IOS)
-void ringrtcVersion_2_74_0(void);
+void ringrtcVersion_2_75_0(void);
 #endif
 
 #if defined(TARGET_OS_IOS)

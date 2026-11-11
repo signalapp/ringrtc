@@ -626,7 +626,7 @@ pub fn string_from_app_slice(app_slice: &AppByteSlice) -> Option<String> {
 // Referenced by SignalRingRTC so a Swift/Rust version mismatch causes linking to fail.
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
-pub extern "C" fn ringrtcVersion_2_74_0() {}
+pub extern "C" fn ringrtcVersion_2_75_0() {}
 
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]

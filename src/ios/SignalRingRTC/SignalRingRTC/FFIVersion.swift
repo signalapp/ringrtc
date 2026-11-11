@@ -18,5 +18,5 @@ internal import RingRTCFfi
 // this function gets inlined into setUpRingRTCLogging, so the reference shows up in Logging.o, not
 // FFIVersion.o.
 func checkFFIVersion() {
-    ringrtcVersion_2_74_0()
+    ringrtcVersion_2_75_0()
 }

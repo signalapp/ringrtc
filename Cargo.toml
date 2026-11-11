@@ -26,5 +26,5 @@ default-members = [
 unnecessary_wraps = "warn"
 
 [workspace.package]
-version = "2.74.0"
+version = "2.75.0"
 authors = ["Calling Team <callingteam@signal.org>"]

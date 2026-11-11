@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.75.0
+
+  - Android: Support hardware H.265 video codecs
+
+  - Remove legacy bidirectional codec support
+
+  - Improve call session teardown flow
+
+  - Import RingRTCFfi internally in SignalRingRTC
+
+  - Call statistics and summary fixes
+
+  - Update to webrtc 8037e
+    - Add H265 support in RFFI and set Android H265 config
+    - Cleanup dred operations
+    - Remove legacy "bidirectional" codec support
+    - Make dred compatible with smart/partial flushing
+    - Fix Xcode 27 builds
+
+  - Call Sim: Add various tests for smart flusing and audio adaptation
+
+  - Build: Skip bundling libringrtc.a for Android
+
+  - CI: Speed up default workspace and webrtc-sys builds
+
+  - CI: Pin jobs to Ubuntu 24.04, until 26.04 support
+
 ## v2.74.0
 
 - Migrate to Swift Package Manager
