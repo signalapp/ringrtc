@@ -74,6 +74,7 @@ typedef enum SrtpCryptoSuite {
 typedef enum RffiVideoCodecType {
     Vp8 = 8,
     Vp9 = 9,
+    H265 = 47,
 } RffiVideoCodecType;
 
 /**
@@ -2383,7 +2384,9 @@ extern bool Rust_disableDtlsAndSetSrtpKey(Borrowed_RffiSessionDescription sessio
 
 extern Owned_RffiConnectionParametersV4 Rust_sessionDescriptionToV4(Borrowed_RffiSessionDescription v4,
                                                                     bool enable_vp9_encode,
-                                                                    bool enable_vp9_decode);
+                                                                    bool enable_vp9_decode,
+                                                                    bool enable_h265_encode,
+                                                                    bool enable_h265_decode);
 
 extern void Rust_deleteV4(Owned_RffiConnectionParametersV4 session_description);
 
@@ -2392,6 +2395,8 @@ extern Owned_RffiSessionDescription Rust_sessionDescriptionFromV4(bool offer,
                                                                   bool enable_tcc_audio,
                                                                   bool enable_vp9_encode,
                                                                   bool enable_vp9_decode,
+                                                                  bool enable_h265_encode,
+                                                                  bool enable_h265_decode,
                                                                   bool v4_is_local);
 
 extern Owned_RffiSessionDescription Rust_localDescriptionForGroupCall(Borrowed_c_char ice_ufrag,

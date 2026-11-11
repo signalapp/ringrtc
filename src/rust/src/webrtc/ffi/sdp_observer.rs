@@ -73,6 +73,8 @@ unsafe extern "C" {
         v4: webrtc::ptr::Borrowed<RffiSessionDescription>,
         enable_vp9_encode: bool,
         enable_vp9_decode: bool,
+        enable_h265_encode: bool,
+        enable_h265_decode: bool,
     ) -> webrtc::ptr::Owned<RffiConnectionParametersV4>;
 
     pub fn Rust_deleteV4(session_description: webrtc::ptr::Owned<RffiConnectionParametersV4>);
@@ -83,6 +85,8 @@ unsafe extern "C" {
         enable_tcc_audio: bool,
         enable_vp9_encode: bool,
         enable_vp9_decode: bool,
+        enable_h265_encode: bool,
+        enable_h265_decode: bool,
         v4_is_local: bool,
     ) -> webrtc::ptr::Owned<RffiSessionDescription>;
 

@@ -25,6 +25,7 @@ enum StatsVideoCodecType {
   kStatsInvalidVideoCodec = 0,
   kStatsVideoCodecVp8 = 8,
   kStatsVideoCodecVp9 = 9,
+  kStatsVideoCodecH265 = 47,
 };
 
 typedef struct {

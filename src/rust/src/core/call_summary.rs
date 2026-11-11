@@ -610,6 +610,7 @@ impl From<(&u32, &StreamSummary)> for protobuf::call_summary::StreamSummary {
             video_codec: match summary.video_codec {
                 StatsVideoCodecType::Vp8 => Some(VideoCodec::Vp8.into()),
                 StatsVideoCodecType::Vp9 => Some(VideoCodec::Vp9.into()),
+                StatsVideoCodecType::H265 => Some(VideoCodec::H265.into()),
                 StatsVideoCodecType::Invalid => None,
             },
             codec_implementation: summary.codec_implementation.clone(),

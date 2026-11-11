@@ -23,8 +23,8 @@ if let webRTCXCFrameworkPath = Context.environment["RINGRTC_WEBRTC_XCFRAMEWORK"]
     binaryTargets.append(
         .binaryTarget(
             name: "WebRTC",
-            url: "https://build-artifacts.signal.org/libraries/webrtc-8037d-ios-release.xcframework.zip",
-            checksum: "6dc59b2bea38870a4f99370c5b72c30bad909181784bd983dd05bcdbf3bec7b1"
+            url: "https://build-artifacts.signal.org/libraries/webrtc-8037e-ios-release.xcframework.zip",
+            checksum: "84f36bd37860cdfc311db3f05f0f0378e37122bf0b221da45318b43f3e08e4cb"
         )
     )
 }

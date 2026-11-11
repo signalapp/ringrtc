@@ -6,10 +6,12 @@ package org.signal.ringrtc;
 
 import androidx.annotation.NonNull;
 import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
 
 import org.webrtc.EglBase;
 import org.webrtc.HardwareVideoDecoderFactory;
 import org.webrtc.HardwareVideoEncoderFactory;
+import org.webrtc.Predicate;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
@@ -59,46 +61,68 @@ public final class Util {
         }
     }
 
-    private static boolean supportsVp9(MediaCodecInfo info) {
-        for (String mimeType : info.getSupportedTypes()) {
-            if (mimeType.equals("video/x-vnd.on2.vp9")) {
+    private static boolean supportsMimeType(MediaCodecInfo info, String mimeType) {
+        for (String supportedType : info.getSupportedTypes()) {
+            if (supportedType.equals(mimeType)) {
                 return true;
             }
         }
         return false;
     }
 
-    public static boolean deviceSupportsVp9HardwareEncoder(EglBase eglBase) {
-      if (eglBase == null) {
-        return false;
-      }
-
-      HardwareVideoEncoderFactory hwFactory = new HardwareVideoEncoderFactory(eglBase.getEglBaseContext(), true, true, Util::supportsVp9);
-
-      if (hwFactory.getSupportedCodecs().length == 0) {
-        Log.w(TAG, "No supported VP9 hardware encoder found");
-        return false;
-      }
-
-      return true;
-    }
-
-    public static boolean deviceSupportsVp9HardwareDecoder(EglBase eglBase) {
+    public static boolean deviceSupportsHardwareEncoder(EglBase eglBase, String mimeType) {
         if (eglBase == null) {
             return false;
         }
 
-        HardwareVideoDecoderFactory hwFactory = new HardwareVideoDecoderFactory(eglBase.getEglBaseContext(), Util::supportsVp9);
+        HardwareVideoEncoderFactory hwFactory = new HardwareVideoEncoderFactory(
+            eglBase.getEglBaseContext(), true, true, includeMimeType(mimeType));
 
         if (hwFactory.getSupportedCodecs().length == 0) {
-            Log.w(TAG, "No supported VP9 hardware decoder found");
+            Log.w(TAG, "No supported " + mimeType + " hardware encoder found");
             return false;
         }
 
         return true;
     }
 
-    public static boolean filterVp9Support(MediaCodecInfo info) {
-      return !supportsVp9(info);
+    public static boolean deviceSupportsHardwareDecoder(EglBase eglBase, String mimeType) {
+        if (eglBase == null) {
+            return false;
+        }
+
+        HardwareVideoDecoderFactory hwFactory = new HardwareVideoDecoderFactory(
+            eglBase.getEglBaseContext(), includeMimeType(mimeType));
+
+        if (hwFactory.getSupportedCodecs().length == 0) {
+            Log.w(TAG, "No supported " + mimeType + " hardware decoder found");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static Predicate<MediaCodecInfo> excludeMimeType(String mimeType) {
+        return info -> !supportsMimeType(info, mimeType);
+    }
+
+    private static Predicate<MediaCodecInfo> includeMimeType(String mimeType) {
+        return info -> supportsMimeType(info, mimeType);
+    }
+
+    /**
+     * Builds the codec-allowed predicate for an encoder/decoder factory.
+     * Returns null (allow everything the factory finds) when nothing needs filtering.
+     */
+    public static Predicate<MediaCodecInfo> codecFilter(boolean allowVp9, boolean allowH265) {
+        Predicate<MediaCodecInfo> filter = null;
+        if (!allowVp9) {
+            filter = excludeMimeType(MediaFormat.MIMETYPE_VIDEO_VP9);
+        }
+        if (!allowH265) {
+            Predicate<MediaCodecInfo> h265Filter = excludeMimeType(MediaFormat.MIMETYPE_VIDEO_HEVC);
+            filter = (filter == null) ? h265Filter : filter.and(h265Filter);
+        }
+        return filter;
     }
 }

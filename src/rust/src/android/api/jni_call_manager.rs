@@ -184,6 +184,12 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
             let enable_vp9_decode = env
                 .get_field(&jni_call_config, jni_str!("enableVp9Decode"), &BOOL_TYPE)?
                 .into_bool()?;
+            let enable_h265_encode = env
+                .get_field(&jni_call_config, jni_str!("enableH265Encode"), &BOOL_TYPE)?
+                .into_bool()?;
+            let enable_h265_decode = env
+                .get_field(&jni_call_config, jni_str!("enableH265Decode"), &BOOL_TYPE)?
+                .into_bool()?;
             let stats_interval_secs_obj = env
                 .get_field(
                     &jni_call_config,
@@ -196,7 +202,9 @@ pub unsafe extern "C" fn Java_org_signal_ringrtc_CallManager_ringrtcProceed(
                 .with_data_mode(DataMode::from_i32(data_mode))
                 .with_dred_duration(dred_duration as u8)
                 .with_enable_vp9_encode(enable_vp9_encode)
-                .with_enable_vp9_decode(enable_vp9_decode);
+                .with_enable_vp9_decode(enable_vp9_decode)
+                .with_enable_h265_encode(enable_h265_encode)
+                .with_enable_h265_decode(enable_h265_decode);
             if !stats_interval_secs_obj.is_null() {
                 let secs = env
                     .call_method(

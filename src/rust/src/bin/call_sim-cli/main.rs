@@ -353,6 +353,8 @@ fn main() -> Result<()> {
         audio_rtcp_report_interval_ms: args.audio_rtcp_report_interval_ms,
         enable_vp9_encode: args.vp9,
         enable_vp9_decode: args.vp9,
+        enable_h265_encode: false,
+        enable_h265_decode: false,
     };
 
     let mut scenario = ScenarioManager::new()?;

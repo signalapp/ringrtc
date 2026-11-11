@@ -862,6 +862,9 @@ pub struct CallConfig {
 
     pub enable_vp9_encode: bool,
     pub enable_vp9_decode: bool,
+
+    pub enable_h265_encode: bool,
+    pub enable_h265_decode: bool,
 }
 
 impl Default for CallConfig {
@@ -879,6 +882,9 @@ impl Default for CallConfig {
             audio_rtcp_report_interval_ms: 5000,
             enable_vp9_encode: true,
             enable_vp9_decode: true,
+            // default to false, platform must first check hardware support
+            enable_h265_encode: false,
+            enable_h265_decode: false,
         }
     }
 }
@@ -895,6 +901,16 @@ impl CallConfig {
 
     pub fn with_enable_vp9_decode(mut self, enable_vp9_decode: bool) -> Self {
         self.enable_vp9_decode = enable_vp9_decode;
+        self
+    }
+
+    pub fn with_enable_h265_encode(mut self, enable_h265_encode: bool) -> Self {
+        self.enable_h265_encode = enable_h265_encode;
+        self
+    }
+
+    pub fn with_enable_h265_decode(mut self, enable_h265_decode: bool) -> Self {
+        self.enable_h265_decode = enable_h265_decode;
         self
     }
 

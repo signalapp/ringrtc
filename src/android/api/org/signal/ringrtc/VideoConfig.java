@@ -12,12 +12,16 @@ public class VideoConfig {
   public boolean enableHardwareVp9Decode;
   public boolean enableSoftwareVp9Encode;
   public boolean enableSoftwareVp9Decode;
+  public boolean enableHardwareH265Encode;
+  public boolean enableHardwareH265Decode;
 
   public VideoConfig() {
     this.enableHardwareVp9Encode = false;
     this.enableHardwareVp9Decode = false;
     this.enableSoftwareVp9Encode = false;
     this.enableSoftwareVp9Decode = false;
+    this.enableHardwareH265Encode = false;
+    this.enableHardwareH265Decode = false;
   }
 
   @Override
@@ -27,6 +31,8 @@ public class VideoConfig {
            ", enableHardwareVp9Decode=" + enableHardwareVp9Decode +
            ", enableSoftwareVp9Encode=" + enableSoftwareVp9Encode +
            ", enableSoftwareVp9Encode=" + enableSoftwareVp9Decode +
+           ", enableHardwareH265Encode=" + enableHardwareH265Encode +
+           ", enableHardwareH265Decode=" + enableHardwareH265Decode +
            "}";
   }
 
@@ -38,11 +44,13 @@ public class VideoConfig {
     return enableHardwareVp9Encode == that.enableHardwareVp9Encode &&
            enableHardwareVp9Decode == that.enableHardwareVp9Decode &&
            enableSoftwareVp9Encode == that.enableSoftwareVp9Encode &&
-           enableSoftwareVp9Decode == that.enableSoftwareVp9Decode;
+           enableSoftwareVp9Decode == that.enableSoftwareVp9Decode &&
+           enableHardwareH265Encode == that.enableHardwareH265Encode &&
+           enableHardwareH265Decode == that.enableHardwareH265Decode;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(enableHardwareVp9Encode, enableHardwareVp9Decode, enableSoftwareVp9Encode, enableSoftwareVp9Decode);
+    return Objects.hash(enableHardwareVp9Encode, enableHardwareVp9Decode, enableSoftwareVp9Encode, enableSoftwareVp9Decode, enableHardwareH265Encode, enableHardwareH265Decode);
   }
 }

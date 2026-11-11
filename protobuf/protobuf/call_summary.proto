@@ -21,6 +21,7 @@ message DistributionSummary {
 enum VideoCodec {
     Vp8 = 8;
     Vp9 = 9;
+    H265 = 47;
 }
 
 message StreamSummary {

@@ -12,17 +12,23 @@ public class CallConfig {
   public byte dredDuration;
   public boolean enableVp9Encode;
   public boolean enableVp9Decode;
+  public boolean enableH265Encode;
+  public boolean enableH265Decode;
   public Integer statsIntervalSecs;
 
   public CallConfig(int dataMode,
       byte dredDuration,
       boolean enableVp9Encode,
       boolean enableVp9Decode,
+      boolean enableH265Encode,
+      boolean enableH265Decode,
       Integer statsIntervalSecs) {
     this.dataMode = dataMode;
     this.dredDuration = dredDuration;
     this.enableVp9Encode = enableVp9Encode;
     this.enableVp9Decode = enableVp9Decode;
+    this.enableH265Encode = enableH265Encode;
+    this.enableH265Decode = enableH265Decode;
     this.statsIntervalSecs = statsIntervalSecs;
   }
 
@@ -33,6 +39,8 @@ public class CallConfig {
         ", dredDuration=" + dredDuration +
         ", enableVp9Encode=" + enableVp9Encode +
         ", enableVp9Decode=" + enableVp9Decode +
+        ", enableH265Encode=" + enableH265Encode +
+        ", enableH265Decode=" + enableH265Decode +
         ", statsIntervalSecs=" + statsIntervalSecs +
         "}";
   }
@@ -48,11 +56,13 @@ public class CallConfig {
         dredDuration == that.dredDuration &&
         enableVp9Encode == that.enableVp9Encode &&
         enableVp9Decode == that.enableVp9Decode &&
+        enableH265Encode == that.enableH265Encode &&
+        enableH265Decode == that.enableH265Decode &&
         Objects.equals(statsIntervalSecs, that.statsIntervalSecs);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(dataMode, dredDuration, enableVp9Encode, enableVp9Decode, statsIntervalSecs);
+    return Objects.hash(dataMode, dredDuration, enableVp9Encode, enableVp9Decode, enableH265Encode, enableH265Decode, statsIntervalSecs);
   }
 }

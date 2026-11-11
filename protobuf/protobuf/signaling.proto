@@ -52,6 +52,7 @@ enum VideoCodecType {
   // Keep these H264 definitions for better logging.
   H264_CONSTRAINED_BASELINE = 40;
   H264_CONSTRAINED_HIGH = 46;
+  H265 = 47;
 }
 
 message VideoCodec {

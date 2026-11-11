@@ -77,6 +77,7 @@ RUSTEXPORT bool Rust_disableDtlsAndSetSrtpKey(
 enum RffiVideoCodecType {
   kRffiVideoCodecVp8 = 8,
   kRffiVideoCodecVp9 = 9,
+  kRffiVideoCodecH265 = 47,
 };
 
 typedef struct {
@@ -108,7 +109,9 @@ RUSTEXPORT ptr::Owned<RffiConnectionParametersV4> Rust_sessionDescriptionToV4(
     ptr::Borrowed<const webrtc::SessionDescriptionInterface>
         session_description_borrowed,
     bool enable_vp9_encode,
-    bool enable_vp9_decode);
+    bool enable_vp9_decode,
+    bool enable_h265_encode,
+    bool enable_h265_decode);
 
 RUSTEXPORT void Rust_deleteV4(ptr::Owned<RffiConnectionParametersV4> v4_owned);
 
@@ -119,6 +122,8 @@ Rust_sessionDescriptionFromV4(
     bool enable_tcc_audio,
     bool enable_vp9_encode,
     bool enable_vp9_decode,
+    bool enable_h265_encode,
+    bool enable_h265_decode,
     bool v4_is_local);
 
 RUSTEXPORT ptr::Owned<webrtc::SessionDescriptionInterface>

@@ -163,6 +163,7 @@ def BuildArch(webrtc_src_dir, build_dir, arch, debug,
             'use_siso': 'true',
             'rtc_opus_support_dred': 'true',
             'rtc_video_psnr': 'false',
+            'rtc_use_h265': 'true',
             'use_debug_fission': 'false'
         }
         if debug is True:

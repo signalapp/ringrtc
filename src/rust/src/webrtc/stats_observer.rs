@@ -139,6 +139,7 @@ pub enum StatsVideoCodecType {
     Invalid = 0,
     Vp8 = 8,
     Vp9 = 9,
+    H265 = 47,
 }
 
 impl Display for StatsVideoCodecType {
@@ -147,6 +148,7 @@ impl Display for StatsVideoCodecType {
             StatsVideoCodecType::Invalid => write!(f, "Invalid"),
             StatsVideoCodecType::Vp8 => write!(f, "VP8"),
             StatsVideoCodecType::Vp9 => write!(f, "VP9"),
+            StatsVideoCodecType::H265 => write!(f, "H265"),
         }
     }
 }
