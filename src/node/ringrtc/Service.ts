@@ -382,6 +382,44 @@ export type HttpResult<T> =
   | { success: true; value: T }
   | { success: false; errorStatusCode: number };
 
+class Logger {
+  private readonly onLogMessage: (
+    level: number,
+    fileName: string,
+    line: number,
+    message: string
+  ) => void;
+
+  constructor(
+    onLogMessage: (
+      level: number,
+      fileName: string,
+      line: number,
+      message: string
+    ) => void
+  ) {
+    this.onLogMessage = onLogMessage;
+  }
+
+  logError(cls: string, message: string): void {
+    this.onLogMessage(
+      CallLogLevel.Error,
+      'Service.ts',
+      0,
+      cls + ': ' + message
+    );
+  }
+
+  logWarn(cls: string, message: string): void {
+    this.onLogMessage(CallLogLevel.Warn, 'Service.ts', 0, cls + ': ' + message);
+  }
+
+  // Called from here
+  logInfo(cls: string, message: string): void {
+    this.onLogMessage(CallLogLevel.Info, 'Service.ts', 0, cls + ': ' + message);
+  }
+}
+
 export class RingRTCType {
   private readonly callManager: CallManager;
   private _call: Call | null;
@@ -390,6 +428,7 @@ export class RingRTCType {
   private readonly _callLinkRequests: Requests<HttpResult<CallLinkState>>;
   private readonly _emptyRequests: Requests<HttpResult<undefined>>;
   private readonly _audioDeviceRequests: Requests<AudioDevice | undefined>;
+  private readonly _logger: Logger;
 
   // A map to hold call information not maintained in RingRTC.
   private readonly _callInfoByCallId: Map<string, CallInfo>;
@@ -503,6 +542,9 @@ export class RingRTCType {
     this._emptyRequests = new Requests();
     this._audioDeviceRequests = new Requests();
     this._callInfoByCallId = new Map();
+    this._logger = new Logger((level, fileName, line, message) => {
+      this.onLogMessage(level, fileName, line, message);
+    });
   }
 
   setConfig(config: Config): void {
@@ -542,7 +584,8 @@ export class RingRTCType {
       callId,
       isIncoming,
       isVideoCall,
-      CallState.Prering
+      CallState.Prering,
+      this._logger
     );
     this._call = call;
     return call;
@@ -621,7 +664,8 @@ export class RingRTCType {
       callId,
       isIncoming,
       isVideoCall,
-      CallState.Prering
+      CallState.Prering,
+      this._logger
     );
     const { handleIncomingCall, handleStartCall } = this;
     if (!handleIncomingCall || !handleStartCall) {
@@ -1256,7 +1300,8 @@ export class RingRTCType {
       GroupCallKind.SignalGroup,
       this.callManager,
       observer,
-      clientId
+      clientId,
+      this._logger
     );
 
     this._groupCallByClientId.set(groupCall.clientId, groupCall);
@@ -1297,7 +1342,8 @@ export class RingRTCType {
       GroupCallKind.CallLink,
       this.callManager,
       observer,
-      clientId
+      clientId,
+      this._logger
     );
 
     this._groupCallByClientId.set(groupCall.clientId, groupCall);
@@ -1736,17 +1782,17 @@ export class RingRTCType {
 
   // Called from here
   logError(message: string): void {
-    this.onLogMessage(CallLogLevel.Error, 'Service.ts', 0, message);
+    this._logger.logError('RingRTCType', message);
   }
 
   // Called from here
   logWarn(message: string): void {
-    this.onLogMessage(CallLogLevel.Warn, 'Service.ts', 0, message);
+    this._logger.logWarn('RingRTCType', message);
   }
 
   // Called from here
   logInfo(message: string): void {
-    this.onLogMessage(CallLogLevel.Info, 'Service.ts', 0, message);
+    this._logger.logInfo('RingRTCType', message);
   }
 
   // Called by MessageReceiver
@@ -2323,6 +2369,8 @@ export class Call {
   endedReason?: CallEndReason;
   summary?: CallSummary;
 
+  private readonly _logger: Logger;
+
   // These callbacks should be set by the UX code.
   handleStateChanged?: () => void;
   handleRemoteAudioEnabled?: () => void;
@@ -2356,7 +2404,8 @@ export class Call {
     callId: CallId,
     isIncoming: boolean,
     isVideoCall: boolean,
-    state: CallState
+    state: CallState,
+    logger: Logger
   ) {
     this._callManager = callManager;
     this._remoteUserId = remoteUserId;
@@ -2364,6 +2413,19 @@ export class Call {
     this._isIncoming = isIncoming;
     this._isVideoCall = isVideoCall;
     this._state = state;
+    this._logger = logger;
+  }
+
+  private logError(message: string): void {
+    this._logger.logError('Call', message);
+  }
+
+  private logWarn(message: string): void {
+    this._logger.logWarn('Call', message);
+  }
+
+  private logInfo(message: string): void {
+    this._logger.logInfo('Call', message);
   }
 
   get remoteUserId(): UserId {
@@ -2393,6 +2455,10 @@ export class Call {
       if (!this._mediaSessionStarted) {
         try {
           // Set the audio state to the latest setting from the UX.
+
+          this.logInfo(
+            `setOutgoingAudioEnabled: ${this._outgoingAudioEnabled}`
+          );
           this._callManager.setOutgoingAudioEnabled(this._outgoingAudioEnabled);
 
           if (this._outgoingVideoIsScreenShare) {
@@ -2464,6 +2530,7 @@ export class Call {
   setOutgoingAudioMuted(muted: boolean): void {
     const enabled = !muted;
 
+    this.logInfo(`setOutgoingAudioMuted: ${muted}`);
     if (this._mediaSessionStarted && this._outgoingAudioEnabled !== enabled) {
       this._outgoingAudioEnabled = enabled;
       this._callManager.setOutgoingAudioEnabled(enabled);
@@ -2718,6 +2785,8 @@ export class GroupCall {
 
   private readonly _clientId: GroupCallClientId;
 
+  private readonly _logger: Logger;
+
   public get clientId(): GroupCallClientId {
     return this._clientId;
   }
@@ -2732,13 +2801,27 @@ export class GroupCall {
     kind: GroupCallKind,
     callManager: CallManager,
     observer: GroupCallObserver,
-    clientId: GroupCallClientId
+    clientId: GroupCallClientId,
+    logger: Logger
   ) {
     this._kind = kind;
     this._callManager = callManager;
     this._observer = observer;
     this._clientId = clientId;
     this._localDeviceState = new LocalDeviceState();
+    this._logger = logger;
+  }
+
+  private logError(message: string): void {
+    this._logger.logError('GroupCall', message);
+  }
+
+  private logWarn(message: string): void {
+    this._logger.logWarn('GroupCall', message);
+  }
+
+  private logInfo(message: string): void {
+    this._logger.logInfo('GroupCall', message);
   }
 
   getKind(): GroupCallKind {
@@ -2793,6 +2876,7 @@ export class GroupCall {
 
   // Called by UI
   setOutgoingAudioMuted(muted: boolean): void {
+    this.logInfo(`setOutgoingAudioMuted: ${muted}`);
     this._localDeviceState.audioMuted = muted;
     this._callManager.setOutgoingAudioMuted(this._clientId, muted);
     this._observer.onLocalDeviceStateChanged(this);
@@ -2800,6 +2884,7 @@ export class GroupCall {
 
   // Called by UI
   setOutgoingAudioMutedRemotely(source: number): void {
+    this.logInfo(`setOutgoingAudioMutedRemotely: ${source}`);
     this._localDeviceState.audioMuted = true;
     this._callManager.setOutgoingAudioMutedRemotely(this._clientId, source);
     this._observer.onLocalDeviceStateChanged(this);
