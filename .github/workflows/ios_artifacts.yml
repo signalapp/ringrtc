@@ -45,9 +45,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
-    - run: brew install protobuf coreutils # for grealpath
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim --component rust-src
-    - run: cargo install --locked --version $(cat config/cbindgen-version) cbindgen
+    - run: brew install coreutils # for grealpath
+    - uses: ./.github/actions/setup-rust
+      with:
+        targets: x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim
+        components: rust-src
+        tools: cbindgen
+        cache: false
     - run: sudo xcodes select 26.1.1
     - run: ./bin/build-ios --ringrtc-only --archive-ringrtc --release
     - name: Output Artifact Checksum

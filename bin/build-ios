@@ -10,7 +10,7 @@
 # $ xcode-select --install
 # $ rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
 # $ rustup component add rust-src
-# $ cargo install --locked --version $(cat config/cbindgen-version) cbindgen
+# $ . config/tools.properties && cargo install --locked --version "$CBINDGEN_VERSION" cbindgen
 #
 # The goal of this script is to do the following:
 # 1) Build WebRTC using existing (but modified) scripts for iOS,

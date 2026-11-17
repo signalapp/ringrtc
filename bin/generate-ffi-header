@@ -11,7 +11,9 @@ HEADER=src/ios/SignalRingRTC/RingRTCFfi/ringrtc.h
 
 cd "$(dirname "$0")"/..
 
-CBINDGEN_VERSION=$(cat config/cbindgen-version)
+# shellcheck source=config/tools.properties
+. config/tools.properties
+: "${CBINDGEN_VERSION:?missing from config/tools.properties}"
 
 usage()
 {

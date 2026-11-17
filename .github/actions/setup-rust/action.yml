@@ -1,0 +1,84 @@
+name: Set up Rust
+description: |
+  Install protoc and the Rust toolchain pinned in rust-toolchain, restore the
+  cargo cache, and install optional prebuilt cargo tools at the versions in
+  config/tools.properties. The cache is only saved from main so that pull
+  requests restore it without filling the cache quota. Release artifact builds
+  pass cache: false so they always build from scratch.
+
+inputs:
+  targets:
+    description: Comma-separated extra rustup targets, e.g. "aarch64-linux-android,aarch64-apple-ios"
+    required: false
+    default: ""
+  components:
+    description: Comma-separated extra rustup components, e.g. "clippy"
+    required: false
+    default: ""
+  tools:
+    description: |
+      Comma-separated cargo tools to install as prebuilt binaries, e.g. "cbindgen,cargo-about".
+      Each must have a version in config/tools.properties.
+    required: false
+    default: ""
+  cache:
+    description: Whether to restore and save the cargo cache
+    required: false
+    default: "true"
+  cache-key:
+    description: Extra key to tell cache entries apart, e.g. the matrix runner
+    required: false
+    default: ""
+  cache-workspaces:
+    description: rust-cache "workspaces" input, for jobs that don't build into ./target
+    required: false
+    default: ". -> target"
+
+runs:
+  using: composite
+  steps:
+    - name: Install protoc
+      uses: ./.github/actions/install-protoc
+
+    - name: Install Rust toolchain
+      shell: bash
+      env:
+        TARGETS: ${{ inputs.targets }}
+        COMPONENTS: ${{ inputs.components }}
+      run: |
+        set -euo pipefail
+        args=(--profile minimal)
+        if [[ -n "${TARGETS}" ]]; then args+=(--target "${TARGETS}"); fi
+        if [[ -n "${COMPONENTS}" ]]; then args+=(--component "${COMPONENTS}"); fi
+        rustup toolchain install "$(cat rust-toolchain)" "${args[@]}"
+
+    - name: Cargo cache
+      if: ${{ inputs.cache == 'true' }}
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      with:
+        key: ${{ inputs.cache-key }}
+        workspaces: ${{ inputs.cache-workspaces }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}
+
+    - name: Resolve tool versions
+      id: tools
+      if: ${{ inputs.tools != '' }}
+      shell: bash
+      env:
+        TOOLS: ${{ inputs.tools }}
+      run: |
+        set -euo pipefail
+        . config/tools.properties
+        IFS=',' read -ra names <<< "${TOOLS}"
+        tools=()
+        for name in "${names[@]}"; do
+          var=$(echo "${name}_VERSION" | tr 'a-z-' 'A-Z_')
+          tools+=("${name}@${!var:?${var} missing from config/tools.properties}")
+        done
+        echo "tools=$(IFS=','; echo "${tools[*]}")" >> "${GITHUB_OUTPUT}"
+
+    - name: Install tools
+      if: ${{ inputs.tools != '' }}
+      uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+      with:
+        tool: ${{ steps.tools.outputs.tools }}

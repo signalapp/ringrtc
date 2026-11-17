@@ -31,9 +31,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
-    - run: brew install protobuf coreutils # for grealpath
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim --component rust-src
-    - run: cargo install --locked --version $(cat config/cbindgen-version) cbindgen
+    - run: brew install coreutils # for grealpath
+    - uses: ./.github/actions/setup-rust
+      with:
+        targets: x86_64-apple-ios,aarch64-apple-ios,aarch64-apple-ios-sim
+        components: rust-src
+        tools: cbindgen
+        # Keep apart from ringrtc.yml's ios job, which builds a different set of targets.
+        cache-key: slow-tests
+        cache-workspaces: . -> out/build
     - run: sudo xcodes select $(cat src/ios/SignalRingRTC/.xcode-version)
     - run: bin/build-ios --release --ringrtc-only
     - run: xcodebuild build-for-testing -scheme SignalRingRTC-Package -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
@@ -84,14 +90,16 @@ jobs:
     if: ${{ always() && (needs.check-up-to-date.outputs.has-changes || github.event_name != 'schedule') }}
     steps:
       - name: Install dependencies
-        run: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire libfontconfig1-dev && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
+        run: sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y libpulse-dev libpulse0 pipewire libfontconfig1-dev && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
       - uses: actions/checkout@v6
       - name: gcloud auth
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: 'projects/741367068918/locations/global/workloadIdentityPools/github/providers/github-actions'
           service_account: 'github-actions@signal-build-artifacts.iam.gserviceaccount.com'
-      - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
+      - uses: ./.github/actions/setup-rust
+        with:
+          tools: inferno
       - name: Build call sim
         run: USE_PREBUILD=1 TYPE=release make call_sim-cli
       - name: Get media files
@@ -106,7 +114,6 @@ jobs:
       - name: Get comparison points
         run: gcloud storage cp $(gcloud storage ls gs://calling-ci-profiling.signal.org/daily_audio* | head -n1) $(gcloud storage ls gs://calling-ci-profiling.signal.org/daily_video* | head -n1)  test_results/profiling_suite-*/perf_test
         working-directory: call_sim/
-      - run: cargo install inferno
       - name: Generate latest comparisons
         run: |
           cd test_results/profiling_suite-*/perf_test

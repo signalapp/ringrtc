@@ -14,7 +14,9 @@ echo "Checking cargo-about version"
 VERSION=$(cargo about --version)
 echo "Found $VERSION"
 
-EXPECTED_VERSION="cargo-about 0.8.4"
+# shellcheck source=config/tools.properties
+. config/tools.properties
+EXPECTED_VERSION="cargo-about ${CARGO_ABOUT_VERSION:?missing from config/tools.properties}"
 if [ "$VERSION" != "$EXPECTED_VERSION" ]; then
 	echo "This tool works with $EXPECTED_VERSION but $VERSION is installed"
 	false

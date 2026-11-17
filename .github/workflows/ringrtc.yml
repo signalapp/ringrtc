@@ -25,20 +25,19 @@ jobs:
     runs-on: ubuntu-latest-4-cores
     steps:
     - name: Install deps
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
+      run: sudo apt-get update && sudo apt-get install -y libpulse-dev
     - name: Install Python tools
       run: pip3 install flake8 mypy
     - uses: actions/checkout@v6
-    - name: Cargo Cache
-      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+    - uses: ./.github/actions/setup-rust
       with:
-        cache-targets: "false"
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --component clippy --target aarch64-linux-android,aarch64-apple-ios
-    - name: Install extra Rust tools
-      run: |
-        cargo +stable install --version 0.8.4 --locked cargo-about
-        cargo +stable install --version $(cat config/cbindgen-version) --locked cbindgen
-    - run: shellcheck **/*.sh bin/build-aar bin/build-desktop bin/build-ios bin/build-javadoc bin/build-rustdoc bin/check-ffi-version bin/check-swift-package bin/fetch-artifact bin/generate-ffi-header bin/gsync-webrtc bin/prepare-workspace bin/run-ios-tests bin/rust-lint-check src/rust/scripts/run-tests
+        components: clippy
+        targets: aarch64-linux-android,aarch64-apple-ios
+        tools: cargo-about,cbindgen
+        cache-workspaces: |
+          .
+          call_sim/docker/signaling_server
+    - run: shellcheck **/*.sh config/tools.properties bin/build-aar bin/build-desktop bin/build-ios bin/build-javadoc bin/build-rustdoc bin/check-ffi-version bin/check-swift-package bin/fetch-artifact bin/generate-ffi-header bin/gsync-webrtc bin/prepare-workspace bin/run-ios-tests bin/rust-lint-check src/rust/scripts/run-tests
     # Skip the Python scripts not written with flake8 style. (Try not to add more.)
     # We ignore 503; it's contradictory with 504!
     # https://www.flake8rules.com/rules/W503.html, https://www.flake8rules.com/rules/W504.html
@@ -83,9 +82,9 @@ jobs:
     runs-on: ubuntu-latest-4-cores
     steps:
     - name: Install deps
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
+      run: sudo apt-get update && sudo apt-get install -y libpulse-dev
     - uses: actions/checkout@v6
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
+    - uses: ./.github/actions/setup-rust
     - name: Run rust tests
       run: cd src/rust && ./scripts/run-tests
 
@@ -113,18 +112,17 @@ jobs:
     - name: Install dependencies
       run: |
         if [[ "${{ runner.os }}" == "macOS" ]]; then
-          brew install protobuf coreutils
+          brew install coreutils
         elif [[ "${{ runner.os }}" == "Linux" ]]; then
-          sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
+          sudo add-apt-repository ppa:pipewire-debian/pipewire-upstream && sudo apt-get update && sudo apt-get install -y libpulse-dev libpulse0 pipewire && systemctl --user daemon-reload && systemctl --user --now enable pipewire pipewire-pulse
         fi
     - uses: actions/checkout@v6
     - uses: actions/setup-node@v6
       with:
         node-version-file: 'src/node/.nvmrc'
-    - name: Install Protoc for Windows
-      uses: ./.github/actions/install-protoc
-      if: ${{ runner.os == 'Windows' }}
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
+    - uses: ./.github/actions/setup-rust
+      with:
+        cache-key: ${{ matrix.os }}
     - run: USE_PREBUILD=1 TYPE=release TEST_RINGRTC_ADM=yes make electron
       if: ${{ runner.os != 'Windows' }}
     - run: USE_PREBUILD=1 TYPE=release TEST_RINGRTC_ADM_UTILS=yes make electron
@@ -177,18 +175,17 @@ jobs:
     - name: Install dependencies
       run: |
         if [[ "${{ runner.os }}" = "macOS" ]]; then
-          brew install protobuf coreutils
+          brew install coreutils
         elif [[ "${{ runner.os }}" == "Linux" ]]; then
-          sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev
+          sudo apt-get update && sudo apt-get install -y libpulse-dev
         fi
     - uses: actions/checkout@v6
     - uses: actions/setup-node@v6
       with:
         node-version-file: 'src/node/.nvmrc'
-    - name: Install Protoc for Windows
-      uses: ./.github/actions/install-protoc
-      if: ${{ runner.os == 'Windows' }}
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
+    - uses: ./.github/actions/setup-rust
+      with:
+        cache-key: ${{ matrix.os }}
     - run: cargo build -p ringrtc --features prebuilt_webrtc
 
   android:
@@ -200,10 +197,10 @@ jobs:
       android_arm64_ringrtc_size_bytes: ${{ steps.get_size.outputs.android_arm64_ringrtc_size }}
       base_android_arm64_ringrtc_size_bytes: ${{ steps.get_size.outputs.base_android_arm64_ringrtc_size }}
     steps:
-    - name: Install protoc
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     - uses: actions/checkout@v6
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+    - uses: ./.github/actions/setup-rust
+      with:
+        targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
     - name: set up JDK 21
       uses: actions/setup-java@v5
       with:
@@ -277,9 +274,12 @@ jobs:
     runs-on: macos-latest-xlarge
     steps:
     - uses: actions/checkout@v6
-    - run: brew install protobuf coreutils # for grealpath
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal --target aarch64-apple-ios-sim
-    - run: cargo install --locked --version $(cat config/cbindgen-version) cbindgen
+    - run: brew install coreutils # for grealpath
+    - uses: ./.github/actions/setup-rust
+      with:
+        targets: aarch64-apple-ios-sim
+        tools: cbindgen
+        cache-workspaces: . -> out/build
     - run: sudo xcodes select $(cat src/ios/SignalRingRTC/.xcode-version)
     - run: bin/run-ios-tests
       env:
@@ -290,9 +290,9 @@ jobs:
     runs-on: ubuntu-latest-4-cores
     steps:
     - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libpulse-dev libpulse0
+      run: sudo apt-get update && sudo apt-get install -y libpulse-dev libpulse0
     - uses: actions/checkout@v6
-    - run: rustup toolchain install $(cat rust-toolchain) --profile minimal
+    - uses: ./.github/actions/setup-rust
     - name: Build direct
       run: USE_PREBUILD=1 TYPE=release make direct
     - name: Build gctc
