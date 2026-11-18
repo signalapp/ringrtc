@@ -120,6 +120,8 @@ jobs:
     - uses: actions/setup-node@v6
       with:
         node-version-file: 'src/node/.nvmrc'
+        cache: npm
+        cache-dependency-path: src/node/package-lock.json
     - uses: ./.github/actions/setup-rust
       with:
         cache-key: ${{ matrix.os }}
@@ -206,6 +208,7 @@ jobs:
       with:
         distribution: temurin
         java-version: 21
+        cache: gradle
     - run: USE_PREBUILD=1 TYPE=release make android
 
     - name: Get cached base sizes
