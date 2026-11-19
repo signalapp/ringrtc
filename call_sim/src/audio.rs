@@ -204,7 +204,7 @@ pub async fn chop_audio_and_analyze(
                         speech_files.ref_path,
                         speech_files.ref_file,
                         &extension,
-                        false,
+                        true,
                     )
                     .await?;
 
