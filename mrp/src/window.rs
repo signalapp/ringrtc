@@ -83,9 +83,8 @@ impl<T> BufferWindow<T> {
         self.left.saturating_add(self.capacity_limit() as u64 - 1)
     }
 
-    #[cfg(test)]
     /// Gets element if seqnum is in bounds
-    fn get(&self, seqnum: u64) -> Option<&T> {
+    pub fn get(&self, seqnum: u64) -> Option<&T> {
         if let Ok(pos) = self.get_pos(seqnum) {
             self.data.get(pos)?.as_ref()
         } else {

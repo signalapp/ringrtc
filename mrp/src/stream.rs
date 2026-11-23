@@ -242,13 +242,14 @@ impl<SendData, ReceiveData> MrpStream<SendData, ReceiveData> {
     const INITIAL_ACKNUM: u64 = 1;
 
     pub fn with_capacity_limit(max_window_size: usize) -> Self {
+        Self::with_seqack(max_window_size, Self::INITIAL_SEQNUM, Self::INITIAL_ACKNUM)
+    }
+
+    pub fn with_seqack(max_window_size: usize, seqnum: u64, acknum: u64) -> Self {
         Self {
             should_ack: false,
-            send_buffer: BufferWindow::with_capacity_limit(max_window_size, Self::INITIAL_SEQNUM),
-            receive_buffer: BufferWindow::with_capacity_limit(
-                max_window_size,
-                Self::INITIAL_ACKNUM,
-            ),
+            send_buffer: BufferWindow::with_capacity_limit(max_window_size, seqnum),
+            receive_buffer: BufferWindow::with_capacity_limit(max_window_size, acknum),
             merge_buffer: None,
             merge_end_seqnum: None,
         }
@@ -530,6 +531,10 @@ impl<SendData, ReceiveData> MrpStream<SendData, ReceiveData> {
         }
 
         Ok(vec![])
+    }
+
+    pub fn send_buffer(&self) -> &BufferWindow<PendingPacket<SendData>> {
+        &self.send_buffer
     }
 }
 
