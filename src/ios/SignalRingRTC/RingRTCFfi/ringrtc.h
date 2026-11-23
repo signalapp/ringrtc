@@ -690,6 +690,8 @@ typedef struct AppCallConfig {
     uint8_t dredDuration;
     bool enableVp9Encode;
     bool enableVp9Decode;
+    bool enableH265Encode;
+    bool enableH265Decode;
     struct AppOptionalUInt16 statsIntervalSecs;
 } AppCallConfig;
 #endif

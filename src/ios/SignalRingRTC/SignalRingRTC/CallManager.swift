@@ -567,10 +567,12 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
     ///   - audioLevelsIntervalMillis: If non-zero, the desired interval between audio level events (in milliseconds)
     ///   - enableVp9Encode: Whether to allow use of the VP9 codec for outgoing (encoded) video for this call
     ///   - enableVp9Decode: Whether to allow use of the VP9 codec for incoming (decoded) video for this call
+    ///   - enableH265Encode: Whether to allow use of the H265 codec for outgoing (encoded) video for this call.
+    ///   - enableH265Decode: Whether to allow use of the H265 codec for incoming (decoded) video for this call.
     ///   - dredDuration: The DRED redundancy level for the audio encoder (0 = disabled)
     ///   - statsIntervalSecs: If non-nil, overrides the interval between stats reports (in seconds)
     @MainActor
-    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, dataMode: DataMode, audioLevelsIntervalMillis: UInt64?, enableVp9Encode: Bool = false, enableVp9Decode: Bool = true, dredDuration: UInt8 = 0, statsIntervalSecs: UInt16? = nil) throws {
+    public func proceed(callId: UInt64, iceServers: [RTCIceServer], hideIp: Bool, videoCaptureController: VideoCaptureController, dataMode: DataMode, audioLevelsIntervalMillis: UInt64?, enableVp9Encode: Bool = false, enableVp9Decode: Bool = true, enableH265Encode: Bool = false, enableH265Decode: Bool = false, dredDuration: UInt8 = 0, statsIntervalSecs: UInt16? = nil) throws {
         Logger.info("proceed(): callId: 0x\(String(callId, radix: 16)), hideIp: \(hideIp)")
         for iceServer in iceServers {
             for url in iceServer.urlStrings {
@@ -609,6 +611,8 @@ public class CallManager<CallType, CallManagerDelegateType>: CallManagerInterfac
             dredDuration: dredDuration,
             enableVp9Encode: enableVp9Encode,
             enableVp9Decode: enableVp9Decode,
+            enableH265Encode: enableH265Encode && RTCVideoEncoderH264.isH265Supported(),
+            enableH265Decode: enableH265Decode && RTCVideoDecoderH264.isH265Supported(),
             statsIntervalSecs: AppOptionalUInt16(value: statsIntervalSecs ?? 0, valid: statsIntervalSecs != nil)
         )
         let retPtr = ringrtcProceed(ringRtcCallManager, callId, appCallContext.getWrapper(), callConfig, audioLevelsIntervalMillis ?? 0)

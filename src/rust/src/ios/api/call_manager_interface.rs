@@ -110,6 +110,8 @@ pub struct AppCallConfig {
     pub dredDuration: u8,
     pub enableVp9Encode: bool,
     pub enableVp9Decode: bool,
+    pub enableH265Encode: bool,
+    pub enableH265Decode: bool,
     pub statsIntervalSecs: AppOptionalUInt16,
 }
 
@@ -743,6 +745,8 @@ pub extern "C" fn ringrtcProceed(
         .with_data_mode(DataMode::from_i32(callConfig.dataMode))
         .with_enable_vp9_encode(callConfig.enableVp9Encode)
         .with_enable_vp9_decode(callConfig.enableVp9Decode)
+        .with_enable_h265_encode(callConfig.enableH265Encode)
+        .with_enable_h265_decode(callConfig.enableH265Decode)
         .with_dred_duration(callConfig.dredDuration);
     if callConfig.statsIntervalSecs.valid {
         config = config.with_stats_interval_secs(callConfig.statsIntervalSecs.value);
