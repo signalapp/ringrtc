@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.76.0
+
+- WebRTC 8037f
+  - Support H265 video on iOS
+
+- Add constructor/getter functions to MRP structs
+
+- Call Sim: Fix for speech analysis
+
+- CI:
+  - add gradle and npm caches
+  - refactor rust & tools setup into action
+  - Pull clippy checks into locally-runnable script
+
+- Add desktop bridge mute state logging
+
 ## v2.75.0
 
   - Android: Support hardware H.265 video codecs
